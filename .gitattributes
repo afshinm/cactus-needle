@@ -1,0 +1,2 @@
+# Preserve upstream bytes for the checksums in vendor/manifest.json.
+/vendor/** -text
