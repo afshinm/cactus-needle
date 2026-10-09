@@ -4,5 +4,5 @@
     "rootDir": "..",
     "noEmit": true
   },
-  "include": ["types.ts", "ai-sdk-types.ts", "../src/**/*.ts"]
+  "include": ["*.ts", "../src/**/*.ts"]
 }

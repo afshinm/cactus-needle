@@ -1,14 +1,23 @@
 import { errorMessage, NeedleError, validateInteger, validateText } from '../errors.js';
+import type {
+  AudioInput,
+  SpeechSession,
+  TranscribeOptions,
+  TranscriptionChunk,
+  TranscriptionResult,
+  TranscriptionSettings,
+} from '../speech.js';
 import type { ToolCall, ToolCollection } from '../tools.js';
 import type {
   CompletionOptions,
   CompletionResult,
   GenerateOptions,
   GenerateResult,
-  Needle,
+  NeedleSession,
 } from '../types.js';
+import { transcriptionSettings } from './audio.js';
 import { serializeTools } from './configuration.js';
-import type { Command, Request, Response } from './protocol.js';
+import type { Command, Request, Response, Result } from './protocol.js';
 
 export interface Transport {
   send(request: Request): void;
@@ -19,12 +28,14 @@ export interface Transport {
 }
 
 interface Pending {
-  resolve(value: CompletionResult | Float32Array | undefined): void;
+  resolve(value: Result): void;
   reject(error: Error): void;
 }
 
 /** Owns ordering, errors and disposal; transports contain platform-specific worker operations. */
-export class RpcSession<Tools extends ToolCollection> implements Needle<Tools> {
+export class RpcSession<Tools extends ToolCollection>
+  implements NeedleSession<Tools>, SpeechSession
+{
   readonly ready: Promise<void>;
   readonly #pending = new Map<number, Pending>();
   #rejectReady!: (error: Error) => void;
@@ -75,7 +86,7 @@ export class RpcSession<Tools extends ToolCollection> implements Needle<Tools> {
     return this.#closing;
   }
 
-  #request(command: Command): Promise<CompletionResult | Float32Array | undefined> {
+  #request(command: Command): Promise<Result> {
     if (this.#closed)
       return Promise.reject(new NeedleError('CLOSED', 'This Needle instance is closed.'));
     return new Promise((resolveResult, reject) => {
@@ -147,6 +158,43 @@ export class RpcSession<Tools extends ToolCollection> implements Needle<Tools> {
   async embed(input: string): Promise<Float32Array> {
     validateText(input, 'input');
     return (await this.#request({ method: 'embed', input })) as Float32Array;
+  }
+
+  async transcribe(
+    audio: AudioInput,
+    { abortSignal, ...options }: TranscribeOptions = {},
+  ): Promise<TranscriptionResult> {
+    abortSignal?.throwIfAborted();
+    const settings = transcriptionSettings(options);
+    const abort = () => {
+      void this.close();
+    };
+    abortSignal?.addEventListener('abort', abort, { once: true });
+    try {
+      const result = await this.#request({ method: 'transcribe', audio, settings });
+      abortSignal?.throwIfAborted();
+      return result as TranscriptionResult;
+    } catch (error) {
+      if (abortSignal?.aborted) throw abortSignal.reason;
+      throw error;
+    } finally {
+      abortSignal?.removeEventListener('abort', abort);
+    }
+  }
+
+  async embedAudio(audio: AudioInput): Promise<Float32Array> {
+    return (await this.#request({ method: 'embedAudio', audio })) as Float32Array;
+  }
+
+  async streamTranscribe(
+    audio: Float32Array | undefined,
+    settings: TranscriptionSettings,
+  ): Promise<TranscriptionChunk> {
+    return (await this.#request({
+      method: 'streamTranscribe',
+      audio,
+      settings,
+    })) as TranscriptionChunk;
   }
 
   async reset(): Promise<void> {

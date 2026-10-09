@@ -11,7 +11,7 @@ export type NeedleErrorCode =
   | 'INTEGRITY_ERROR';
 
 export class NeedleError extends Error {
-  override readonly name = 'NeedleError';
+  override readonly name: string = 'NeedleError';
 
   constructor(
     readonly code: NeedleErrorCode,

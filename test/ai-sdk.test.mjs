@@ -24,9 +24,12 @@ test('SDK provider factories are lazy, recognize model IDs, and import safely du
   assert.equal(needle().modelId, 'needle3');
   assert.equal(needle.languageModel().specificationVersion, 'v3');
   assert.equal(needle.embeddingModel().specificationVersion, 'v3');
+  assert.equal(needle.transcriptionModel().modelId, 'whistle');
+  assert.equal(browserProvider().transcriptionModel().specificationVersion, 'v3');
   assert.equal(browserProvider()().provider, 'needle');
   assert.throws(() => needle('missing'), NoSuchModelError.isInstance);
   assert.throws(() => needle.embeddingModel('missing'), NoSuchModelError.isInstance);
+  assert.throws(() => needle.transcriptionModel('needle3'), NoSuchModelError.isInstance);
   assert.throws(() => needle.imageModel('needle3'), NoSuchModelError.isInstance);
 });
 

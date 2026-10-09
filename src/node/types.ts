@@ -12,9 +12,16 @@ export interface NeedleOptions<Tools extends ToolCollection = ToolCollection>
 }
 
 export interface DownloadOptions {
+  /** Defaults to needle3. Whistle is a separate, optional download. */
+  model?: 'needle3' | 'whistle';
   cacheDir?: string;
   signal?: AbortSignal;
   /** Network timeout in milliseconds. Defaults to 300000. */
   timeoutMs?: number;
   onProgress?: (progress: { receivedBytes: number; totalBytes: number }) => void;
 }
+
+export type WhistleOptions = Pick<
+  NeedleOptions,
+  'modelPath' | 'cacheDir' | 'bufferSize' | 'abortSignal'
+>;

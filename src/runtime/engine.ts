@@ -1,5 +1,14 @@
 import { NeedleError } from '../errors.js';
+import type {
+  AudioInput,
+  SpeechLanguage,
+  TranscriptionChunk,
+  TranscriptionResult,
+  TranscriptionSettings,
+  TranscriptWord,
+} from '../speech.js';
 import type { CompletionResult, FunctionCall } from '../types.js';
+import { prepareAudio, SPEECH_LANGUAGES } from './audio.js';
 import type { EngineConfig } from './protocol.js';
 
 export interface WasmModule {
@@ -7,6 +16,25 @@ export interface WasmModule {
   _malloc(bytes: number): number;
   _free(pointer: number): void;
   _needle_load(pointer: number, bytes: bigint): number;
+  _needle_models(): number;
+  _needle_stream_transcribe_process(
+    pcm: number,
+    samples: number,
+    language: number,
+    keywords: number,
+    out: number,
+    capacity: number,
+  ): number;
+  _needle_stream_transcribe_stop(out: number, capacity: number): number;
+  _needle_transcribe(
+    pcm: number,
+    samples: number,
+    language: number,
+    keywords: number,
+    wordTimestamps: number,
+    out: number,
+    capacity: number,
+  ): number;
   _needle_init(system: number, tools: number, index: number): number;
   _needle_last_error(): number;
   _needle_complete(
@@ -73,6 +101,26 @@ function isCall(value: unknown): value is FunctionCall {
   );
 }
 
+function nonnegative(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function validWords(words: unknown): words is TranscriptWord[] {
+  return (
+    Array.isArray(words) &&
+    words.every(
+      (word) =>
+        word &&
+        typeof word.word === 'string' &&
+        nonnegative(word.start) &&
+        nonnegative(word.end) &&
+        word.end >= word.start &&
+        nonnegative(word.probability) &&
+        word.probability <= 1,
+    )
+  );
+}
+
 export class Engine {
   readonly #output: number;
   #toolsJson: string | undefined;
@@ -93,7 +141,13 @@ export class Engine {
     // Keep the archive allocation for the full worker lifetime: engines may read
     // tensor/tokenizer data in place. Terminating the worker reclaims all memory.
     if (module._needle_load(model, BigInt(data.length)) < 0) throw engine.#error('needle_load');
-    engine.#configureTools(config.toolsJson);
+    const speech = config.modelKind === 'whistle';
+    if (!(module._needle_models() & (speech ? 2 : 1)))
+      throw new NeedleError(
+        'INVALID_MODEL',
+        `Expected ${speech ? 'Whistle speech' : 'Needle text'} weights.`,
+      );
+    if (!speech) engine.#configureTools(config.toolsJson);
     return engine;
   }
 
@@ -135,6 +189,22 @@ export class Engine {
     return new NeedleError('ENGINE_ERROR', `${operation} failed${detail ? `: ${detail}` : '.'}`);
   }
 
+  #readJson(): unknown {
+    const view = this.module.HEAPU8.subarray(this.#output, this.#output + this.config.bufferSize);
+    const end = view.indexOf(0);
+    if (end < 0)
+      throw new NeedleError('INVALID_RESPONSE', 'Output was truncated. Increase bufferSize.');
+    try {
+      return JSON.parse(new TextDecoder().decode(view.subarray(0, end)));
+    } catch (cause) {
+      throw new NeedleError(
+        'INVALID_RESPONSE',
+        'Engine returned invalid JSON. Increase bufferSize.',
+        { cause },
+      );
+    }
+  }
+
   complete(
     input: string,
     maxNewTokens: number,
@@ -153,23 +223,7 @@ export class Engine {
         this.config.bufferSize,
       );
       if (code < 0) throw this.#error('needle_complete');
-      const view = this.module.HEAPU8.subarray(this.#output, this.#output + this.config.bufferSize);
-      const end = view.indexOf(0);
-      if (end < 0)
-        throw new NeedleError(
-          'INVALID_RESPONSE',
-          'Output was truncated. Increase bufferSize and reset the session.',
-        );
-      let result: CompletionResult;
-      try {
-        result = JSON.parse(new TextDecoder().decode(view.subarray(0, end))) as CompletionResult;
-      } catch (error) {
-        throw new NeedleError(
-          'INVALID_RESPONSE',
-          'Engine returned invalid JSON. Increase bufferSize and reset the session.',
-          { cause: error },
-        );
-      }
+      const result = this.#readJson() as CompletionResult;
       if (
         !result ||
         typeof result !== 'object' ||
@@ -204,26 +258,161 @@ export class Engine {
     });
   }
 
-  embed(input: string): Float32Array {
-    return this.#withString(input, (pointer) => {
-      const dimension = this.module._needle_embed(pointer, 0, 0, 0, 0);
-      if (dimension <= 0) throw this.#error('needle_embed');
-      if (dimension > 1_048_576)
-        throw new NeedleError('INVALID_RESPONSE', `Unexpected embedding dimension: ${dimension}.`);
-      const output = this.#allocate(dimension * 4);
+  transcribe(audio: AudioInput, settings: TranscriptionSettings): TranscriptionResult {
+    const { samples, durationInSeconds } = prepareAudio(audio);
+    const pcm = this.#allocate(samples.byteLength);
+    try {
+      this.module.HEAPU8.set(
+        new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength),
+        pcm,
+      );
+      return this.#withString(settings.language ?? '', (language) =>
+        this.#withString(settings.keywords?.join('\n') ?? '', (keywords) => {
+          this.module.HEAPU8[this.#output] = 0;
+          const code = this.module._needle_transcribe(
+            pcm,
+            samples.length,
+            settings.language ? language : 0,
+            settings.keywords?.length ? keywords : 0,
+            settings.wordTimestamps ? 1 : 0,
+            this.#output,
+            this.config.bufferSize,
+          );
+          if (code < 0) throw this.#error('needle_transcribe');
+          const raw = this.#readJson() as {
+            text: string;
+            language: SpeechLanguage | '';
+            ttft_ms: number;
+            decode_tps: number;
+            words?: TranscriptWord[];
+          };
+          if (
+            !raw ||
+            typeof raw !== 'object' ||
+            typeof raw.text !== 'string' ||
+            (raw.language !== '' && !SPEECH_LANGUAGES.includes(raw.language)) ||
+            !nonnegative(raw.ttft_ms) ||
+            !nonnegative(raw.decode_tps) ||
+            (raw.words !== undefined && !validWords(raw.words))
+          )
+            throw new NeedleError(
+              'INVALID_RESPONSE',
+              'Engine returned an unexpected transcription envelope.',
+            );
+          return {
+            text: raw.text,
+            language: raw.language,
+            durationInSeconds,
+            timeToFirstTokenMs: raw.ttft_ms,
+            tokensPerSecond: raw.decode_tps,
+            ...(raw.words === undefined ? {} : { words: raw.words }),
+          };
+        }),
+      );
+    } finally {
+      this.module._free(pcm);
+    }
+  }
+
+  streamTranscribe(
+    audio: Float32Array | undefined,
+    settings: TranscriptionSettings,
+  ): TranscriptionChunk {
+    this.module.HEAPU8[this.#output] = 0;
+    let code: number;
+    if (audio === undefined) {
+      code = this.module._needle_stream_transcribe_stop(this.#output, this.config.bufferSize);
+    } else {
+      if (!(audio instanceof Float32Array))
+        throw new NeedleError(
+          'INVALID_ARGUMENT',
+          'Stream chunks must be 16 kHz mono Float32Array samples.',
+        );
+      const { samples } = prepareAudio(audio);
+      const pcm = this.#allocate(samples.byteLength);
       try {
-        if (this.module._needle_embed(pointer, 0, 0, output, dimension) !== dimension)
-          throw this.#error('needle_embed');
-        // Copy after the call, using the current heap: WASM allocation can grow
-        // memory and invalidate earlier views. The copy outlives the next call.
-        const embedding = new Float32Array(this.module.HEAPU8.buffer, output, dimension).slice();
-        if (!embedding.every(Number.isFinite))
-          throw new NeedleError('INVALID_RESPONSE', 'Engine returned a non-finite embedding.');
-        return embedding;
+        this.module.HEAPU8.set(
+          new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength),
+          pcm,
+        );
+        code = this.#withString(settings.language ?? '', (language) =>
+          this.#withString(settings.keywords?.join('\n') ?? '', (keywords) =>
+            this.module._needle_stream_transcribe_process(
+              pcm,
+              samples.length,
+              settings.language ? language : 0,
+              settings.keywords?.length ? keywords : 0,
+              this.#output,
+              this.config.bufferSize,
+            ),
+          ),
+        );
       } finally {
-        this.module._free(output);
+        this.module._free(pcm);
       }
-    });
+    }
+    if (code < 0) throw this.#error('needle_stream_transcribe');
+    const raw = this.#readJson() as Omit<TranscriptionChunk, 'passMs'> & { pass_ms: number };
+    if (
+      !raw ||
+      typeof raw !== 'object' ||
+      typeof raw.text !== 'string' ||
+      typeof raw.pending !== 'string' ||
+      !validWords(raw.words) ||
+      (raw.language !== '' && !SPEECH_LANGUAGES.includes(raw.language)) ||
+      !nonnegative(raw.received) ||
+      !nonnegative(raw.pass_ms)
+    )
+      throw new NeedleError(
+        'INVALID_RESPONSE',
+        'Engine returned an unexpected streaming transcription envelope.',
+      );
+    return {
+      text: raw.text,
+      words: raw.words,
+      pending: raw.pending,
+      language: raw.language,
+      received: raw.received,
+      passMs: raw.pass_ms,
+    };
+  }
+
+  embed(input: string): Float32Array {
+    return this.#withString(input, (pointer) => this.#embedding(pointer, 0, 0));
+  }
+
+  embedAudio(audio: AudioInput): Float32Array {
+    const { samples } = prepareAudio(audio);
+    const pcm = this.#allocate(samples.byteLength);
+    try {
+      this.module.HEAPU8.set(
+        new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength),
+        pcm,
+      );
+      return this.#embedding(0, pcm, samples.length);
+    } finally {
+      this.module._free(pcm);
+    }
+  }
+
+  #embedding(pointer: number, pcm: number, samples: number): Float32Array {
+    const dimension = this.module._needle_embed(pointer, pcm, samples, 0, 0);
+    if (dimension <= 0) throw this.#error('needle_embed');
+    if (dimension > 1_048_576)
+      throw new NeedleError('INVALID_RESPONSE', `Unexpected embedding dimension: ${dimension}.`);
+    const output = this.#allocate(dimension * 4);
+    try {
+      if (this.module._needle_embed(pointer, pcm, samples, output, dimension) !== dimension)
+        throw this.#error('needle_embed');
+      // Copy after the call, using the current heap: WASM allocation can grow
+      // memory and invalidate earlier views. The copy outlives the next call.
+      const embedding = new Float32Array(this.module.HEAPU8.buffer, output, dimension).slice();
+      if (!embedding.every(Number.isFinite))
+        throw new NeedleError('INVALID_RESPONSE', 'Engine returned a non-finite embedding.');
+      return embedding;
+    } finally {
+      this.module._free(output);
+    }
   }
 
   reset(): void {

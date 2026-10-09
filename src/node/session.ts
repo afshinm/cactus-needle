@@ -1,21 +1,58 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
+import { Agent } from '../client.js';
 import { NeedleError, validateInteger, validateText } from '../errors.js';
-import { DEFAULT_MODEL } from '../runtime/artifacts.js';
+import { DEFAULT_MODEL, DEFAULT_SPEECH_MODEL } from '../runtime/artifacts.js';
 import { configuration } from '../runtime/configuration.js';
 import { RpcSession } from '../runtime/rpc-session.js';
+import type { Whistle } from '../speech.js';
+import { SpeechClient } from '../speech-client.js';
 import type { ToolCollection } from '../tools.js';
 import type { Needle } from '../types.js';
+import { readAudio } from './audio.js';
 import { getModelPath } from './model.js';
 import type { WorkerConfig } from './protocol.js';
-import type { NeedleOptions } from './types.js';
+import type { NeedleOptions, WhistleOptions } from './types.js';
 
 /** Load a local model in its own worker. This function never accesses the network. */
 export async function createNeedle<const Tools extends ToolCollection = ToolCollection>(
   options: NeedleOptions<Tools> = {},
 ): Promise<Needle<Tools>> {
+  const agent = new Agent<Tools>(
+    (signal) => loadSession({ ...options, stateless: false, abortSignal: signal }, 'needle3'),
+    options,
+  );
+  try {
+    await agent.ready(options.abortSignal);
+    return agent;
+  } catch (error) {
+    await agent.close();
+    throw error;
+  }
+}
+
+/** Load local Whistle weights once. Provision them with downloadModel({ model: 'whistle' }). */
+export async function createWhistle(options: WhistleOptions = {}): Promise<Whistle> {
+  const speech = new SpeechClient(
+    (signal) => loadSession({ ...options, abortSignal: signal }, 'whistle'),
+    readAudio,
+  );
+  try {
+    await speech.ready(options.abortSignal);
+    return speech;
+  } catch (error) {
+    await speech.close();
+    throw error;
+  }
+}
+
+export async function loadSession<Tools extends ToolCollection>(
+  options: NeedleOptions<Tools>,
+  modelKind: 'needle3' | 'whistle',
+): Promise<RpcSession<Tools>> {
   options.abortSignal?.throwIfAborted();
+  const artifact = modelKind === 'needle3' ? DEFAULT_MODEL : DEFAULT_SPEECH_MODEL;
   const config = configuration(options);
   const tokens = validateInteger(
     options.maxOutputTokens ?? options.maxNewTokens ?? 512,
@@ -28,7 +65,7 @@ export async function createNeedle<const Tools extends ToolCollection = ToolColl
     modelPath =
       options.modelPath instanceof URL
         ? fileURLToPath(options.modelPath)
-        : (options.modelPath ?? getModelPath(options.cacheDir));
+        : (options.modelPath ?? getModelPath(options.cacheDir, modelKind));
     validateText(modelPath, 'modelPath');
     if (!modelPath) throw new Error('The path is empty.');
     modelPath = resolve(modelPath);
@@ -41,8 +78,9 @@ export async function createNeedle<const Tools extends ToolCollection = ToolColl
   }
   const workerData: WorkerConfig = {
     ...config,
+    modelKind,
     modelPath,
-    ...(options.modelPath === undefined ? { expectedSha256: DEFAULT_MODEL.sha256 } : {}),
+    ...(options.modelPath === undefined ? { expectedSha256: artifact.sha256 } : {}),
   };
   const execArgv = process.execArgv.filter(
     (arg, index, args) =>

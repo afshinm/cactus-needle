@@ -1,7 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { errorMessage, NeedleError } from '../errors.js';
-import type { Request, Response } from '../runtime/protocol.js';
-import type { CompletionResult } from '../types.js';
+import type { Request, Response, Result } from '../runtime/protocol.js';
 import { loadNodeEngine } from './engine.js';
 import type { WorkerConfig } from './protocol.js';
 
@@ -27,8 +26,17 @@ try {
   const engine = await loadNodeEngine(workerData as WorkerConfig);
   port.on('message', (request: Request) => {
     try {
-      let value: CompletionResult | Float32Array | undefined;
+      let value: Result;
       switch (request.method) {
+        case 'transcribe':
+          value = engine.transcribe(request.audio, request.settings);
+          break;
+        case 'embedAudio':
+          value = engine.embedAudio(request.audio);
+          break;
+        case 'streamTranscribe':
+          value = engine.streamTranscribe(request.audio, request.settings);
+          break;
         case 'complete':
           value = engine.complete(request.input, request.maxNewTokens, request.toolsJson);
           break;

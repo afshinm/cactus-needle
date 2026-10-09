@@ -9,6 +9,11 @@ export interface StandardJsonSchema<Input = unknown> {
     readonly jsonSchema: {
       readonly input: (options: { readonly target: 'draft-07' }) => Record<string, unknown>;
     };
+    readonly validate?: (
+      value: unknown,
+    ) =>
+      | { readonly issues?: readonly unknown[] | undefined; readonly value?: unknown }
+      | Promise<{ readonly issues?: readonly unknown[] | undefined; readonly value?: unknown }>;
   };
 }
 
@@ -18,6 +23,8 @@ export interface Tool<Input = unknown> {
   readonly description?: string;
   readonly inputSchema: JsonSchema;
   readonly triggers?: readonly string[];
+  /** Used only by Needle.run(); complete() and generate() never execute tools. */
+  execute?(input: Input, context: { abortSignal: AbortSignal }): unknown | Promise<unknown>;
   readonly [inputType]?: Input;
 }
 
@@ -57,10 +64,23 @@ type SchemaType<S, Depth extends unknown[] = []> = Depth['length'] extends 8
                       }
                     : unknown;
 
-interface ToolOptions<Schema> {
+export type InferSchema<S> = S extends StandardJsonSchema
+  ? NonNullable<S['~standard']['types']>['input']
+  : SchemaType<S>;
+
+interface ToolOptions<Schema, Input = InferSchema<Schema>> {
   description?: string;
   inputSchema: Schema;
   triggers?: readonly string[];
+  execute?: Tool<Input>['execute'];
+}
+
+const validators = new WeakMap<Tool, NonNullable<StandardJsonSchema['~standard']['validate']>>();
+
+export async function validateToolInput(definition: Tool, input: unknown): Promise<void> {
+  const validate = validators.get(definition);
+  if (validate && (await validate(input)).issues)
+    throw new NeedleError('INVALID_ARGUMENT', 'Tool input failed schema validation.');
 }
 
 /** Define a named tool's input once; its name comes from the tools object key. */
@@ -70,6 +90,7 @@ export function tool<S extends StandardJsonSchema>(
 export function tool<const S extends JsonSchema>(options: ToolOptions<S>): Tool<SchemaType<S>>;
 export function tool(options: ToolOptions<JsonSchema | StandardJsonSchema>): Tool {
   let schema = options.inputSchema;
+  let validate: StandardJsonSchema['~standard']['validate'];
   if (!schema || typeof schema !== 'object')
     throw new NeedleError('INVALID_ARGUMENT', 'inputSchema must be an object schema.');
   if ('~standard' in schema) {
@@ -82,6 +103,7 @@ export function tool(options: ToolOptions<JsonSchema | StandardJsonSchema>): Too
     }
     try {
       schema = standard.jsonSchema.input({ target: 'draft-07' });
+      if (standard.validate) validate = standard.validate.bind(standard);
     } catch (cause) {
       throw new NeedleError(
         'INVALID_ARGUMENT',
@@ -92,11 +114,16 @@ export function tool(options: ToolOptions<JsonSchema | StandardJsonSchema>): Too
   }
   if (schema.type !== 'object')
     throw new NeedleError('INVALID_ARGUMENT', 'A tool inputSchema must describe an object.');
-  return Object.freeze({
+  if (options.execute !== undefined && typeof options.execute !== 'function')
+    throw new NeedleError('INVALID_ARGUMENT', 'execute must be a function.');
+  const definition = Object.freeze({
     inputSchema: schema,
     ...(options.description === undefined ? {} : { description: options.description }),
     ...(options.triggers === undefined ? {} : { triggers: options.triggers }),
+    ...(options.execute === undefined ? {} : { execute: options.execute }),
   });
+  if (validate) validators.set(definition, validate);
+  return definition;
 }
 
 export type ToolCall<Tools extends ToolCollection = ToolCollection> = Tools extends ToolSet
@@ -122,11 +149,6 @@ export function normalizeTools(tools: ToolCollection): readonly ToolDefinition[]
         `Tool ${name} needs inputSchema. Use tool({ inputSchema, description }).`,
       );
     }
-    if ('execute' in value)
-      throw new NeedleError(
-        'INVALID_ARGUMENT',
-        'Tools describe predictions; execute them explicitly in your application.',
-      );
     return {
       name,
       parameters: value.inputSchema,

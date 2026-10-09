@@ -1,7 +1,7 @@
 {
   "name": "cactus-needle",
   "version": "0.3.0",
-  "description": "Local Needle 3 inference for browsers and Node.js, standalone or as a Vercel AI SDK provider.",
+  "description": "Local Needle tool calling and Whistle speech transcription for browsers and Node.js, standalone or with Vercel AI SDK.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -67,10 +67,12 @@
   },
   "keywords": [
     "needle",
+    "whistle",
     "local-ai",
     "wasm",
     "tool-calling",
     "embeddings",
+    "speech-to-text",
     "offline",
     "ai-sdk",
     "vercel"

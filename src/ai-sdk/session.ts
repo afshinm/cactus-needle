@@ -1,15 +1,22 @@
+import type { Whistle } from '../speech.js';
 import type { Needle, SessionOptions } from '../types.js';
 
-export type SessionFactory = (
-  options: SessionOptions & { abortSignal?: AbortSignal },
-) => Promise<Needle>;
+export type SessionFactory<Session = Needle, Options = SessionOptions> = (
+  options: Options & { abortSignal?: AbortSignal },
+) => Promise<Session>;
+
+export type WhistleFactory = SessionFactory<Whistle, Record<never, never>>;
 
 /** One worker per SDK request: dynamic schemas, parallel calls and aborts stay isolated. */
-export async function withSession<T>(
-  load: SessionFactory,
-  options: SessionOptions,
+export async function withSession<
+  T,
+  Session extends { close(): Promise<void> },
+  Options extends object,
+>(
+  load: SessionFactory<Session, Options>,
+  options: Options,
   signal: AbortSignal | undefined,
-  run: (session: Needle) => Promise<T>,
+  run: (session: Session) => Promise<T>,
 ): Promise<T> {
   signal?.throwIfAborted();
   const session = await load({

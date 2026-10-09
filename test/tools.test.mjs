@@ -35,8 +35,23 @@ test('tool schemas report conversion errors without creating a worker', () => {
   ]) {
     assert.throws(() => tool({ inputSchema }), { code: 'INVALID_ARGUMENT' });
   }
-  assert.throws(
-    () => configuration({ tools: { action: { inputSchema: { type: 'object' }, execute() {} } } }),
-    { code: 'INVALID_ARGUMENT' },
-  );
+  assert.throws(() => tool({ inputSchema: { type: 'object' }, execute: 'not a function' }), {
+    code: 'INVALID_ARGUMENT',
+  });
+});
+
+test('execution callbacks remain on the host and never enter model schemas', () => {
+  let calls = 0;
+  const action = tool({
+    inputSchema: { type: 'object' },
+    execute() {
+      calls++;
+    },
+  });
+  const config = configuration({ tools: { action } });
+  assert.equal(calls, 0);
+  assert.equal(typeof action.execute, 'function');
+  assert.deepEqual(JSON.parse(config.toolsJson), [
+    { name: 'action', parameters: { type: 'object' } },
+  ]);
 });

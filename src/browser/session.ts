@@ -1,11 +1,15 @@
+import { Agent } from '../client.js';
 import { NeedleError, validateInteger } from '../errors.js';
-import { DEFAULT_MODEL } from '../runtime/artifacts.js';
+import { DEFAULT_MODEL, DEFAULT_SPEECH_MODEL } from '../runtime/artifacts.js';
 import { configuration } from '../runtime/configuration.js';
 import { RpcSession } from '../runtime/rpc-session.js';
+import type { Whistle } from '../speech.js';
+import { SpeechClient } from '../speech-client.js';
 import type { ToolCollection } from '../tools.js';
 import type { Needle } from '../types.js';
+import { readAudio } from './audio.js';
 import type { BrowserConfig, BrowserRequest, BrowserResponse } from './protocol.js';
-import type { BrowserNeedleOptions } from './types.js';
+import type { BrowserNeedleOptions, BrowserWhistleOptions } from './types.js';
 
 function resolveUrl(value: string | URL, label: string): string {
   try {
@@ -25,7 +29,40 @@ function resolveUrl(value: string | URL, label: string): string {
 export async function createNeedle<const Tools extends ToolCollection = ToolCollection>(
   options: BrowserNeedleOptions<Tools> = {},
 ): Promise<Needle<Tools>> {
+  const agent = new Agent<Tools>(
+    (signal) => loadSession({ ...options, stateless: false, abortSignal: signal }, 'needle3'),
+    options,
+  );
+  try {
+    await agent.ready(options.abortSignal);
+    return agent;
+  } catch (error) {
+    await agent.close();
+    throw error;
+  }
+}
+
+/** Load and cache Whistle separately from the text model. Reuse this session for each recording. */
+export async function createWhistle(options: BrowserWhistleOptions = {}): Promise<Whistle> {
+  const speech = new SpeechClient(
+    (signal) => loadSession({ ...options, abortSignal: signal }, 'whistle'),
+    readAudio,
+  );
+  try {
+    await speech.ready(options.abortSignal);
+    return speech;
+  } catch (error) {
+    await speech.close();
+    throw error;
+  }
+}
+
+export async function loadSession<Tools extends ToolCollection>(
+  options: BrowserNeedleOptions<Tools>,
+  modelKind: 'needle3' | 'whistle',
+): Promise<RpcSession<Tools>> {
   options.abortSignal?.throwIfAborted();
+  const artifact = modelKind === 'needle3' ? DEFAULT_MODEL : DEFAULT_SPEECH_MODEL;
   const shared = configuration(options);
   const tokens = validateInteger(
     options.maxOutputTokens ?? options.maxNewTokens ?? 512,
@@ -44,7 +81,7 @@ export async function createNeedle<const Tools extends ToolCollection = ToolColl
     );
   if (options.onDownloadProgress !== undefined && typeof options.onDownloadProgress !== 'function')
     throw new NeedleError('INVALID_ARGUMENT', 'onDownloadProgress must be a function.');
-  const input = options.model ?? DEFAULT_MODEL.url;
+  const input = options.model ?? artifact.url;
   const model =
     typeof input === 'string' || input instanceof URL
       ? resolveUrl(input, 'model')
@@ -55,15 +92,16 @@ export async function createNeedle<const Tools extends ToolCollection = ToolColl
           : undefined;
   if (model === undefined)
     throw new NeedleError('INVALID_ARGUMENT', 'model must be a URL, ArrayBuffer, or Uint8Array.');
-  const pinned = model === DEFAULT_MODEL.url;
+  const pinned = model === artifact.url;
   if (
     pinned &&
     options.modelSha256 !== undefined &&
-    options.modelSha256.toLowerCase() !== DEFAULT_MODEL.sha256
+    options.modelSha256.toLowerCase() !== artifact.sha256
   )
     throw new NeedleError('INVALID_ARGUMENT', 'The default model checksum cannot be overridden.');
   const config: BrowserConfig = {
     ...shared,
+    modelKind,
     model,
     wasmUrl:
       options.wasmUrl === undefined
@@ -72,7 +110,7 @@ export async function createNeedle<const Tools extends ToolCollection = ToolColl
     cache: options.cache ?? true,
     offline: options.offline ?? false,
     ...(pinned
-      ? { modelSha256: DEFAULT_MODEL.sha256, modelSize: DEFAULT_MODEL.size }
+      ? { modelSha256: artifact.sha256, modelSize: artifact.size }
       : options.modelSha256
         ? { modelSha256: options.modelSha256.toLowerCase() }
         : {}),

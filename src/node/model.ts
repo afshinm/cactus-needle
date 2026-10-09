@@ -7,7 +7,12 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import { errorMessage, NeedleError, validateInteger } from '../errors.js';
-import { DEFAULT_MODEL as MODEL, MODEL_FILE } from '../runtime/artifacts.js';
+import {
+  DEFAULT_SPEECH_MODEL,
+  DEFAULT_MODEL as MODEL,
+  MODEL_FILE,
+  SPEECH_MODEL_FILE,
+} from '../runtime/artifacts.js';
 import type { DownloadOptions } from './types.js';
 
 // Preserve the Node entry's public metadata types while sharing manifest values.
@@ -20,7 +25,14 @@ export const DEFAULT_MODEL: Readonly<{
 }> = MODEL;
 
 /** Locate the default model without reading the file or using the network. */
-export function getModelPath(cacheDir?: string): string {
+function modelFor(name: 'needle3' | 'whistle') {
+  if (name === 'needle3') return DEFAULT_MODEL;
+  if (name === 'whistle') return DEFAULT_SPEECH_MODEL;
+  throw new NeedleError('INVALID_ARGUMENT', 'model must be needle3 or whistle.');
+}
+
+export function getModelPath(cacheDir?: string, model: 'needle3' | 'whistle' = 'needle3'): string {
+  const artifact = modelFor(model);
   const root =
     cacheDir ??
     join(
@@ -29,10 +41,13 @@ export function getModelPath(cacheDir?: string): string {
         join(homedir(), '.cache'),
       'cactus-needle-node',
     );
-  return resolve(root, DEFAULT_MODEL.revision, MODEL_FILE);
+  return resolve(root, artifact.revision, model === 'needle3' ? MODEL_FILE : SPEECH_MODEL_FILE);
 }
 
-async function verifiedCache(path: string): Promise<boolean> {
+async function verifiedCache(
+  path: string,
+  artifact: { size: number; sha256: string },
+): Promise<boolean> {
   let info: Stats;
   try {
     info = await stat(path);
@@ -40,7 +55,7 @@ async function verifiedCache(path: string): Promise<boolean> {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
     throw error;
   }
-  if (!info.isFile() || info.size !== DEFAULT_MODEL.size) {
+  if (!info.isFile() || info.size !== artifact.size) {
     throw new NeedleError(
       'INTEGRITY_ERROR',
       `Cached model has the wrong size. Remove ${path} and download it again.`,
@@ -48,7 +63,7 @@ async function verifiedCache(path: string): Promise<boolean> {
   }
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(path)) hash.update(chunk);
-  if (hash.digest('hex') !== DEFAULT_MODEL.sha256) {
+  if (hash.digest('hex') !== artifact.sha256) {
     throw new NeedleError(
       'INTEGRITY_ERROR',
       `Cached model failed SHA-256 verification. Remove ${path} and download it again.`,
@@ -60,9 +75,11 @@ async function verifiedCache(path: string): Promise<boolean> {
 /** Explicitly download the pinned model. Verified cache hits do not make any network requests. */
 export async function downloadModel(options: DownloadOptions = {}): Promise<string> {
   options.signal?.throwIfAborted();
+  const model = options.model ?? 'needle3';
+  const artifact = modelFor(model);
   const timeout = validateInteger(options.timeoutMs ?? 300_000, 'timeoutMs', 1, 2_147_483_647);
-  const target = getModelPath(options.cacheDir);
-  if (await verifiedCache(target)) return target;
+  const target = getModelPath(options.cacheDir, model);
+  if (await verifiedCache(target, artifact)) return target;
   await mkdir(dirname(target), { recursive: true });
   const temporary = `${target}.${randomUUID()}.part`;
   const signal = AbortSignal.any([
@@ -70,7 +87,7 @@ export async function downloadModel(options: DownloadOptions = {}): Promise<stri
     ...(options.signal ? [options.signal] : []),
   ]);
   try {
-    const response = await fetch(DEFAULT_MODEL.url, { signal });
+    const response = await fetch(artifact.url, { signal });
     if (!response.ok || !response.body) {
       throw new NeedleError('DOWNLOAD_FAILED', `Model download failed: HTTP ${response.status}.`);
     }
@@ -80,11 +97,11 @@ export async function downloadModel(options: DownloadOptions = {}): Promise<stri
       transform(chunk: Buffer, _encoding, callback) {
         try {
           received += chunk.length;
-          if (received > DEFAULT_MODEL.size) {
+          if (received > artifact.size) {
             throw new NeedleError('INTEGRITY_ERROR', 'Downloaded model exceeds its pinned size.');
           }
           hash.update(chunk);
-          options.onProgress?.({ receivedBytes: received, totalBytes: DEFAULT_MODEL.size });
+          options.onProgress?.({ receivedBytes: received, totalBytes: artifact.size });
           callback(null, chunk);
         } catch (error) {
           callback(error as Error);
@@ -97,7 +114,7 @@ export async function downloadModel(options: DownloadOptions = {}): Promise<stri
       createWriteStream(temporary, { flags: 'wx', mode: 0o600 }),
       { signal },
     );
-    if (received !== DEFAULT_MODEL.size || hash.digest('hex') !== DEFAULT_MODEL.sha256) {
+    if (received !== artifact.size || hash.digest('hex') !== artifact.sha256) {
       throw new NeedleError(
         'INTEGRITY_ERROR',
         'Downloaded model failed size or SHA-256 verification.',

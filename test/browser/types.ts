@@ -1,11 +1,16 @@
-import type { EmbeddingModelV3, LanguageModelV3, ProviderV3 } from '@ai-sdk/provider';
+import type {
+  EmbeddingModelV3,
+  LanguageModelV3,
+  ProviderV3,
+  TranscriptionModelV3,
+} from '@ai-sdk/provider';
 import {
   type BrowserNeedleProviderOptions,
   createNeedleProvider,
   createNeedle as createProvider,
   type NeedleProviderSettings,
 } from 'cactus-needle/ai-sdk/browser';
-import { createNeedle, tool } from 'cactus-needle/browser';
+import { createNeedle, Needle, tool, transcribe, Whistle } from 'cactus-needle/browser';
 import { z } from 'zod';
 
 const settings: NeedleProviderSettings = { model: '/models/needle3.cact' };
@@ -15,11 +20,24 @@ const provider: ProviderV3 = createProvider(settings);
 void [legacyFactory(legacySettings), legacySettings satisfies NeedleProviderSettings];
 const model: LanguageModelV3 = provider.languageModel('needle3');
 const embeddingModel: EmbeddingModelV3 = provider.embeddingModel('needle3');
+const speechModel: TranscriptionModelV3 = createProvider({
+  speech: { model: '/whistle.cact' },
+}).transcriptionModel();
 // @ts-expect-error Browser provider does not accept a Node filesystem path.
 createProvider({ modelPath: '/tmp/model.cact' });
-void [model, embeddingModel];
+void [model, embeddingModel, speechModel];
 
 async function usage() {
+  const speech = new Whistle({ weights: '/models/whistle.cact' });
+  const speechText: string = (await speech.transcribe(new File([], 'clip.wav'))).text;
+  await transcribe(new Float32Array(16_000), { offline: true });
+  for await (const part of speech.stream([new Float32Array(16_000)])) console.log(part.pending);
+  const lazy = new Needle({ weights: '/models/needle3.cact' });
+  await lazy.close();
+  await speech.close();
+  // @ts-expect-error Browser speech constructors do not accept filesystem paths.
+  new Whistle({ modelPath: '/tmp/whistle.cact' });
+  void speechText;
   const needle = await createNeedle({
     model: '/models/needle3.cact',
     tools: {

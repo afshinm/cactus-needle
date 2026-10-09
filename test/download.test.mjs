@@ -3,7 +3,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { DEFAULT_MODEL, downloadModel, getModelPath } from '../dist/index.js';
+import { DEFAULT_MODEL, DEFAULT_SPEECH_MODEL, downloadModel, getModelPath } from '../dist/index.js';
 
 async function cache(t) {
   const cacheDir = await mkdtemp(join(tmpdir(), 'needle-download-'));
@@ -20,6 +20,18 @@ test('HTTP errors do not leave a model or partial file', async (t) => {
   });
   await assert.rejects(downloadModel({ cacheDir }), { code: 'DOWNLOAD_FAILED' });
   assert.deepEqual(await readdir(dirname(getModelPath(cacheDir))), []);
+});
+
+test('Whistle uses separate pinned weights and a separate cache path', async (t) => {
+  const cacheDir = await cache(t);
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    assert.equal(url, DEFAULT_SPEECH_MODEL.url);
+    assert.ok(url.includes(DEFAULT_SPEECH_MODEL.revision));
+    return new Response('unavailable', { status: 503 });
+  });
+  assert.notEqual(getModelPath(cacheDir, 'whistle'), getModelPath(cacheDir));
+  await assert.rejects(downloadModel({ cacheDir, model: 'whistle' }), { code: 'DOWNLOAD_FAILED' });
+  assert.deepEqual(await readdir(dirname(getModelPath(cacheDir, 'whistle'))), []);
 });
 
 test('truncated downloads are rejected and cleaned up', async (t) => {

@@ -1,7 +1,7 @@
 /// <reference lib="esnext.disposable" preserve="true" />
 
-import type { JsonValue } from './schema.js';
-import type { ToolCall, ToolCollection } from './tools.js';
+import type { JsonSchema, JsonValue } from './schema.js';
+import type { InferSchema, StandardJsonSchema, ToolCall, ToolCollection } from './tools.js';
 
 export interface FunctionCall {
   name: string;
@@ -68,7 +68,7 @@ export interface GenerateResult<Tools extends ToolCollection = ToolCollection> {
   raw: CompletionResult;
 }
 
-export interface Needle<Tools extends ToolCollection = ToolCollection> {
+export interface NeedleSession<Tools extends ToolCollection = ToolCollection> {
   generate<const RequestTools extends ToolCollection = Tools>(
     options: GenerateOptions<RequestTools>,
   ): Promise<GenerateResult<RequestTools>>;
@@ -80,4 +80,33 @@ export interface Needle<Tools extends ToolCollection = ToolCollection> {
   /** Stop the worker and reject outstanding calls. Safe to call more than once. */
   close(): Promise<void>;
   [Symbol.asyncDispose](): Promise<void>;
+}
+
+export interface RunOptions {
+  maxSteps?: number;
+  maxNewTokens?: number;
+  /** Reject calls the engine flags as ungrounded. Defaults to true. */
+  strict?: boolean;
+  abortSignal?: AbortSignal;
+}
+
+export interface RunResult extends CompletionResult {
+  results: JsonValue[];
+}
+
+export interface ExtractOptions {
+  maxNewTokens?: number;
+  strict?: boolean;
+  abortSignal?: AbortSignal;
+}
+
+export interface Needle<Tools extends ToolCollection = ToolCollection>
+  extends NeedleSession<Tools> {
+  /** Execute registered tool functions and feed their results back, as in Python's Needle.run(). */
+  run(query: string, options?: RunOptions): Promise<RunResult>;
+  extract<const Schema extends JsonSchema | StandardJsonSchema>(
+    text: string,
+    schema: Schema,
+    options?: ExtractOptions,
+  ): Promise<InferSchema<Schema> | null>;
 }

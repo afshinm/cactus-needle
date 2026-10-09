@@ -1,7 +1,7 @@
 import factory from 'needle-runtime';
 import { errorMessage, NeedleError } from '../errors.js';
 import { Engine } from '../runtime/engine.js';
-import type { CompletionResult } from '../types.js';
+import type { Result } from '../runtime/protocol.js';
 import { loadAssets } from './assets.js';
 import type { BrowserRequest, BrowserResponse } from './protocol.js';
 
@@ -49,8 +49,17 @@ scope.onmessage = async ({ data: request }) => {
   if ('type' in request) return;
   try {
     if (!engine) throw new NeedleError('ENGINE_ERROR', 'Worker is not ready.');
-    let value: CompletionResult | Float32Array | undefined;
+    let value: Result;
     switch (request.method) {
+      case 'transcribe':
+        value = engine.transcribe(request.audio, request.settings);
+        break;
+      case 'embedAudio':
+        value = engine.embedAudio(request.audio);
+        break;
+      case 'streamTranscribe':
+        value = engine.streamTranscribe(request.audio, request.settings);
+        break;
       case 'complete':
         value = engine.complete(request.input, request.maxNewTokens, request.toolsJson);
         break;

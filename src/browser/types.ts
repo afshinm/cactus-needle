@@ -25,3 +25,9 @@ export interface BrowserNeedleOptions<Tools extends ToolCollection = ToolCollect
   workerUrl?: string | URL;
   wasmUrl?: string | URL;
 }
+
+/** Same asset controls as Needle, defaulting to the pinned 16.9 MB Whistle model. */
+export type BrowserWhistleOptions = Omit<
+  BrowserNeedleOptions,
+  'tools' | 'system' | 'stateless' | 'maxOutputTokens' | 'maxNewTokens'
+>;

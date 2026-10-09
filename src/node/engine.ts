@@ -14,7 +14,7 @@ export async function loadNodeEngine(config: WorkerConfig): Promise<Engine> {
     throw new NeedleError(
       missing ? 'MODEL_NOT_FOUND' : 'INVALID_MODEL',
       missing
-        ? `Model not found: ${config.modelPath}. Call downloadModel() explicitly or provide modelPath.`
+        ? `Model not found: ${config.modelPath}. Call downloadModel(${config.modelKind === 'whistle' ? "{ model: 'whistle' }" : ''}) explicitly or provide modelPath.`
         : `Cannot read model ${config.modelPath}: ${errorMessage(cause)}`,
       { cause },
     );
