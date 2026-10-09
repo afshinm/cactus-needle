@@ -44,15 +44,18 @@ export async function createNeedle<const Tools extends ToolCollection = ToolColl
     modelPath,
     ...(options.modelPath === undefined ? { expectedSha256: DEFAULT_MODEL.sha256 } : {}),
   };
+  const execArgv = process.execArgv.filter(
+    (arg, index, args) =>
+      !arg.startsWith('--input-type=') &&
+      arg !== '--input-type' &&
+      args[index - 1] !== '--input-type',
+  );
   const worker = new Worker(new URL('./worker.js', import.meta.url), {
     workerData,
     env: { NEEDLE_TELEMETRY: '0', DO_NOT_TRACK: '1' },
-    execArgv: process.execArgv.filter(
-      (arg, index, args) =>
-        !arg.startsWith('--input-type=') &&
-        arg !== '--input-type' &&
-        args[index - 1] !== '--input-type',
-    ),
+    // Let Node inherit worker-safe options unless stdin's input type needs removing.
+    // Explicitly forwarding all flags also forwards unsupported process/V8 options.
+    ...(execArgv.length === process.execArgv.length ? {} : { execArgv }),
   });
   const session = new RpcSession<Tools>(
     {

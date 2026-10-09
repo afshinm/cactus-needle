@@ -186,10 +186,12 @@ test('engine initialization errors preserve the context-limit explanation', asyn
   );
 });
 
-test('inference works with networking denied in the parent and worker', async () => {
+test('inference inherits network-denying preloads with process-wide Node flags', async () => {
   const { stdout } = await promisify(execFile)(
     process.execPath,
     [
+      '--max-old-space-size=256',
+      '--title=needle-inference-test',
       '--import',
       fileURLToPath(new URL('../fixtures/deny-network.mjs', import.meta.url)),
       fileURLToPath(new URL('../fixtures/offline-client.mjs', import.meta.url)),

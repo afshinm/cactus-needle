@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04]
+        node: ['22.18.0', '24', '26']
+        include:
+          - os: macos-latest
+            node: '24'
+          - os: windows-latest
+            node: '24'
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Check lint and types
+        if: runner.os == 'Linux' && matrix.node == '24'
+        run: pnpm check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Cache model weights
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/*/needle3.cact
+          key: needle-model-${{ runner.os }}-${{ hashFiles('vendor/manifest.json') }}
+
+      - name: Download and verify model
+        run: pnpm model:download
+
+      - name: Test Node inference
+        run: pnpm test:integration
+
+      - name: Install Chromium
+        if: runner.os == 'Linux' && matrix.node == '24'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test browser inference
+        if: runner.os == 'Linux' && matrix.node == '24'
+        run: pnpm test:browser
+
+      - name: Test installed npm package
+        if: runner.os == 'Linux' && matrix.node == '24'
+        run: pnpm test:pack
+
+  ci:
+    name: CI
+    if: ${{ !cancelled() }}
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Check test matrix
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+        run: test "$TEST_RESULT" = success
