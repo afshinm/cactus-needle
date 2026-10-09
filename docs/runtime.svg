@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="176" viewBox="0 0 720 176" role="img" aria-labelledby="title description">
+  <title id="title">Two APIs, one local model</title>
+  <desc id="description">In a browser or Node.js, your application uses the standalone client or the AI SDK provider. Both run Needle 3 in a local WebAssembly worker.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="718" height="174" rx="12" fill="#f8fafc" stroke="#cbd5e1"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="24" y="28" font-size="13" fill="#475569">In your browser or Node.js</text>
+    <g fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)">
+      <path d="M 160 104 H 190 V 72 H 224"/>
+      <path d="M 190 104 V 136 H 224"/>
+      <path d="M 422 72 H 458 V 104 H 500"/>
+      <path d="M 422 136 H 458 V 104" marker-end="none"/>
+    </g>
+    <g fill="#ffffff" stroke="#cbd5e1">
+      <rect x="24" y="80" width="136" height="48" rx="8"/>
+      <rect x="226" y="48" width="196" height="48" rx="8"/>
+      <rect x="226" y="112" width="196" height="48" rx="8"/>
+    </g>
+    <rect x="502" y="68" width="194" height="72" rx="8" fill="#ecfdf5" stroke="#86b8a2"/>
+    <g fill="#0f172a" font-size="16" text-anchor="middle">
+      <text x="92" y="109">Your app</text>
+      <text x="324" y="77">Standalone client</text>
+      <text x="324" y="141">AI SDK provider</text>
+      <text x="599" y="97" font-weight="600">Needle 3</text>
+    </g>
+    <text x="599" y="120" text-anchor="middle" font-size="14" fill="#334155">Local WASM worker</text>
+  </g>
+</svg>
