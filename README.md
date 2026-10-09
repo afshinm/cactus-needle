@@ -1,5 +1,32 @@
 # cactus-needle
 
+<p>
+  <a href="https://www.npmjs.com/package/cactus-needle" target="_blank" rel="noopener noreferrer">
+    <img
+      src="https://img.shields.io/npm/v/cactus-needle?style=for-the-badge&amp;labelColor=000000"
+      alt="npm version"
+    />
+  </a>
+  <a href="https://github.com/afshinm/cactus-needle/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
+    <img
+      src="https://img.shields.io/npm/l/cactus-needle?style=for-the-badge&amp;labelColor=000000"
+      alt="Apache-2.0 license"
+    />
+  </a>
+  <a href="#environments">
+    <img
+      src="https://img.shields.io/node/v/cactus-needle?style=for-the-badge&amp;labelColor=000000"
+      alt="Node.js version requirement"
+    />
+  </a>
+  <a href="https://github.com/afshinm/cactus-needle/actions/workflows/ci.yml" target="_blank" rel="noopener noreferrer">
+    <img
+      src="https://img.shields.io/github/actions/workflow/status/afshinm/cactus-needle/ci.yml?branch=main&amp;style=for-the-badge&amp;label=CI&amp;labelColor=000000"
+      alt="CI status"
+    />
+  </a>
+</p>
+
 Local tool calling, structured extraction, embeddings, and speech transcription
 for JavaScript and TypeScript, powered by [Needle](https://github.com/cactus-compute/needle)
 and [Whistle](https://www.cactuscompute.com/blog/whistle).
