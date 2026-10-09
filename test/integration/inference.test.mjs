@@ -142,6 +142,45 @@ test('stateless sessions serialize overlapping completions', async (t) => {
   assert.deepEqual(unrelated.function_calls, []);
 });
 
+test('one loaded session serializes different request tools and restores defaults', async (t) => {
+  const agent = await session(t, { stateless: true });
+  const [temperature, light, none, original] = await Promise.all([
+    agent.generate({ prompt: 'Set the thermostat to 21 degrees', tools: [thermostat] }),
+    agent.generate({ prompt: 'Turn off the bedroom lights', tools: [lights] }),
+    agent.generate({ prompt: 'Turn on the kitchen lights', tools: [] }),
+    agent.complete('Turn on the kitchen lights'),
+  ]);
+  assert.deepEqual(temperature.toolCalls, [
+    { toolName: 'set_thermostat', input: { temperature: 21 } },
+  ]);
+  assert.deepEqual(light.toolCalls, [
+    { toolName: 'set_lights', input: { room: 'bedroom', on: false } },
+  ]);
+  assert.deepEqual(none.toolCalls, []);
+  assert.deepEqual(original.function_calls, [
+    { name: 'set_lights', arguments: { room: 'kitchen', on: true } },
+  ]);
+  assert.equal((await agent.embed('still loaded')).length, 3072);
+});
+
+test('invalid request tools and failed reconfiguration leave the model reusable', async (t) => {
+  const agent = await session(t, { stateless: true });
+  await assert.rejects(agent.generate({ prompt: 'lights on', tools: [lights, lights] }), {
+    code: 'INVALID_ARGUMENT',
+  });
+  await assert.rejects(
+    agent.generate({
+      prompt: 'lights on',
+      tools: [{ ...lights, description: 'facts '.repeat(10_000) }],
+    }),
+    { code: 'ENGINE_ERROR' },
+  );
+  const result = await agent.generate({ prompt: 'Turn on the kitchen lights' });
+  assert.deepEqual(result.toolCalls, [
+    { toolName: 'set_lights', input: { room: 'kitchen', on: true } },
+  ]);
+});
+
 test('embeddings own their memory across later calls and shutdown', async (t) => {
   const agent = await session(t);
   const first = await agent.embed('Turn on the kitchen lights');

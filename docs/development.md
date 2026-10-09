@@ -17,6 +17,41 @@ pnpm test
 Build before running checks or tests: they exercise the compiled package.
 `pnpm dev` rebuilds on changes. `pnpm pack` builds and produces the npm tarball.
 
+## Browser demo
+
+`pnpm demo` starts the demos in `demo/`. The beat studio demonstrates multiple
+tool calls from one request. Its opening example asks for a tempo, kick pattern,
+and bass volume; Needle returns three independent calls. Other examples change
+several track volumes or drum patterns. The exact prompt is visible and editable.
+Relative requests such as “make the bass louder and the hats quieter” also work.
+
+Each tool changes one musical control. There are no whole-beat presets or
+scripted expansions of model responses. Web Audio synthesizes the instruments
+and auditions edits immediately; the model predicts the actions and arguments.
+Patterns remain editable by hand. The Lights tab keeps the smaller device-control
+example. Results show timing and call count, with the actual tool calls behind
+“View tools”.
+
+Needle works best with concrete requests. Vague requests such as “make it more
+fun” do not reliably produce a musical plan. The studio uses Needle's `triggers`
+routing hints; matching hints can bypass the upstream confidence floor. No
+withheld predictions are executed, and accepted calls are validated as a batch.
+
+Both use plain HTML, TypeScript, and Tailwind through Vite. The public browser
+client loads one session on the first request. Switching tabs passes the active
+example's tools to `generate()` and keeps the worker and weights in memory.
+Cancellation terminates the worker; retrying creates a new session from the
+cached assets. `pnpm demo:build`
+produces `demo/dist`; `pnpm demo:preview` serves that build locally.
+
+The studio takes interaction cues from [Chrome Music Lab](https://musiclab.chromeexperiments.com/)
+and [Ableton Learning Music](https://learningmusic.ableton.com/make-beats/make-beats.html).
+Its schemas follow [Needle's tool-design guide](https://www.cactuscompute.com/blog/designing-tools-for-needle),
+and its audio uses the [Web Audio lookahead scheduling pattern](https://web.dev/articles/audio-scheduling).
+
+The `Demo` workflow publishes `demo/dist` on pushes to `main`. Set the repository's
+Pages source to **GitHub Actions** in Settings → Pages. No API keys are needed.
+
 ## Build and lint
 
 [tsdown](https://tsdown.dev/) compiles the library and declarations, cleans

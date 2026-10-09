@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Make a beat or control the lights with cactus-needle. Real tool calls from a model running in your browser." />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>cactus-needle demo</title>
+  </head>
+  <body class="flex min-h-dvh flex-col bg-white font-sans text-black antialiased">
+    <header class="flex shrink-0 items-center justify-between px-10 py-7 max-[480px]:p-6">
+      <a class="wordmark text-[28px] leading-none font-semibold tracking-tight" href="https://github.com/afshinm/cactus-needle">cactus-needle</a>
+      <a class="py-2 text-base underline-offset-4 hover:underline" href="https://github.com/afshinm/cactus-needle">GitHub</a>
+    </header>
+    <main class="mx-auto mt-10 mb-16 w-full max-w-4xl shrink-0 px-6 sm:mt-16" aria-label="Local tool calling demos">
+      <nav class="mb-10 flex justify-center gap-6 sm:mb-12" aria-label="Choose a demo">
+        <button class="border-b-2 border-transparent py-2 text-lg text-gray-500 aria-pressed:border-black aria-pressed:text-black disabled:cursor-default" type="button" data-demo="studio" aria-pressed="true" aria-controls="panel-studio">Beat studio</button>
+        <button class="border-b-2 border-transparent py-2 text-lg text-gray-500 aria-pressed:border-black aria-pressed:text-black disabled:cursor-default" type="button" data-demo="lights" aria-pressed="false" aria-controls="panel-lights">Lights</button>
+      </nav>
+      <section id="panel-studio" aria-label="Beat studio">
+        <div class="mb-7 flex flex-wrap items-center justify-between gap-x-4 gap-y-5">
+          <div class="flex items-center gap-5">
+            <button id="play" class="group flex min-h-11 min-w-23 items-center justify-center gap-2 rounded-lg bg-black px-4 py-2 text-base text-white hover:bg-neutral-800 disabled:opacity-45" type="button" aria-pressed="false">
+              <svg class="size-3.5 group-aria-pressed:hidden" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="m4 2 10 6-10 6z" /></svg>
+              <svg class="hidden size-3.5 group-aria-pressed:block" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 3h10v10H3z" /></svg>
+              <span id="play-label">Play</span>
+            </button>
+            <label class="flex items-baseline gap-1.5">
+              <span class="sr-only">Tempo</span>
+              <input id="tempo" class="w-16 rounded-md border border-gray-200 px-2 py-1.5 text-lg tabular-nums" type="number" min="40" max="200" step="1" value="120" required />
+              <span class="text-sm text-gray-500">bpm</span>
+            </label>
+          </div>
+        </div>
+        <div id="tracks" class="space-y-5 sm:space-y-4"></div>
+        <p id="audio-status" class="mt-2 text-[15px] text-red-700 empty:hidden" role="status"></p>
+      </section>
+      <section id="panel-lights" class="mx-auto max-w-2xl" aria-label="Lights" hidden>
+        <svg class="absolute size-0 overflow-hidden" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="light" x1="0" y1="0" x2="0" y2="1">
+              <stop stop-color="#ffe7a3" stop-opacity="0.75" />
+              <stop offset="1" stop-color="#ffe7a3" stop-opacity="0" />
+            </linearGradient>
+            <symbol id="lamp" viewBox="0 0 120 150">
+              <path class="beam" d="M36 63 7 140h106L84 63Z" fill="url(#light)" stroke="none" />
+              <path d="M60 8v28M54 36h12v7H54z" fill="white" />
+              <path class="bulb" d="M52 63a8 8 0 0 0 16 0" />
+              <path class="shade" d="M52 43h16c3 0 5 2 7 5l13 16H32l13-16c2-3 4-5 7-5Z" />
+            </symbol>
+          </defs>
+        </svg>
+        <div class="mx-3 grid grid-cols-3 max-[480px]:mx-0">
+          <figure class="room group text-center" data-room="kitchen" data-on="false">
+            <svg class="h-[150px] max-[480px]:h-32" aria-hidden="true"><use href="#lamp" /></svg>
+            <figcaption class="text-lg max-[480px]:text-[17px]">Kitchen <span class="light-state mt-1 block text-[15px] text-gray-500 group-data-[on=true]:text-black">Off</span></figcaption>
+          </figure>
+          <figure class="room group text-center" data-room="living room" data-on="false">
+            <svg class="h-[150px] max-[480px]:h-32" aria-hidden="true"><use href="#lamp" /></svg>
+            <figcaption class="text-lg max-[480px]:text-[17px]">Living room <span class="light-state mt-1 block text-[15px] text-gray-500 group-data-[on=true]:text-black">Off</span></figcaption>
+          </figure>
+          <figure class="room group text-center" data-room="bedroom" data-on="false">
+            <svg class="h-[150px] max-[480px]:h-32" aria-hidden="true"><use href="#lamp" /></svg>
+            <figcaption class="text-lg max-[480px]:text-[17px]">Bedroom <span class="light-state mt-1 block text-[15px] text-gray-500 group-data-[on=true]:text-black">Off</span></figcaption>
+          </figure>
+        </div>
+      </section>
+      <div class="mx-auto mt-9 max-w-3xl sm:mt-10">
+        <form id="prompt-form" class="flex items-end gap-2 rounded-2xl border border-gray-300 p-2">
+          <label id="prompt-label" class="sr-only" for="prompt">Tell the studio what to change</label>
+          <textarea
+            id="prompt"
+            class="max-h-60 min-w-0 flex-1 resize-none field-sizing-content rounded-lg bg-transparent px-3 py-2.5 text-lg leading-relaxed outline-offset-0 placeholder:text-gray-500 max-[480px]:pl-2 max-[480px]:text-[17px]"
+            name="prompt"
+            rows="2"
+            placeholder="Tell the studio what to change…"
+            maxlength="500"
+            autocomplete="off"
+            required
+            aria-describedby="status"
+          >Bring the tempo to 128 bpm, put the kick on steps 1, 5, 9, 13, and set the bass volume to 80.</textarea>
+          <button id="run" class="min-h-11 min-w-19 rounded-lg bg-black px-4.5 py-2.5 text-[17px] text-white hover:bg-neutral-800 disabled:cursor-default disabled:opacity-45 max-[480px]:min-w-16 max-[480px]:px-3" type="submit">Run</button>
+        </form>
+        <div id="examples" class="mt-4 flex flex-wrap justify-center gap-2"></div>
+        <div class="mt-6 flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1 text-[15px] text-gray-500">
+          <p id="status" class="min-h-6 text-center leading-relaxed text-balance data-[error=true]:text-red-700" role="status">Runs in your browser. First use downloads 35 MB.</p>
+          <button id="view-tools" class="underline underline-offset-4 hover:text-black" type="button" aria-expanded="false" aria-controls="result" hidden>View tools</button>
+        </div>
+        <div id="result" class="mt-4 rounded-xl bg-gray-50 px-5 py-4" hidden>
+          <p id="call-label" class="mb-2 text-sm text-gray-500 empty:hidden"></p>
+          <pre class="overflow-x-auto whitespace-pre"><code id="calls" class="font-mono text-sm leading-relaxed"></code></pre>
+        </div>
+      </div>
+      <noscript class="mt-5 block text-center">Enable JavaScript to run the model in your browser.</noscript>
+    </main>
+    <footer class="mx-auto mt-auto w-full max-w-2xl shrink-0 px-6 pb-[calc(3rem+env(safe-area-inset-bottom))] text-center text-[17px] leading-7 text-gray-500 sm:pb-[calc(4rem+env(safe-area-inset-bottom))] sm:text-lg">
+      <p>
+        <a class="underline underline-offset-4 hover:text-gray-700" href="https://github.com/afshinm/cactus-needle">cactus-needle</a>
+        runs the <a class="underline underline-offset-4 hover:text-gray-700" href="https://github.com/cactus-compute/needle">Needle AI model</a>
+        in JavaScript apps. Here, it reads your
+        request and chooses actions to change the beat or control the lights.
+        The model runs in your browser, so your requests stay on your device.
+      </p>
+    </footer>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

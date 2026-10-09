@@ -42,6 +42,29 @@ async function usage() {
     prompt: 'Turn on the kitchen lights',
     maxOutputTokens: 128,
   });
+  const switched = await needle.generate({
+    prompt: 'Set the tempo to 120',
+    tools: {
+      set_tempo: tool({
+        inputSchema: {
+          type: 'object',
+          properties: { bpm: { type: 'integer' } },
+          required: ['bpm'],
+        },
+      }),
+    },
+  });
+  for (const call of switched.toolCalls) {
+    const name: 'set_tempo' = call.toolName;
+    const bpm: number = call.input.bpm;
+    // @ts-expect-error Request tools replace the creation-time tools.
+    call.input.room;
+    void [name, bpm];
+  }
+  const defaults = await needle.generate({ prompt: 'lights on' });
+  // @ts-expect-error A request's tools do not change the default result type.
+  const tempoName: 'set_tempo' = defaults.toolCalls[0]?.toolName;
+  void tempoName;
   for (const call of toolCalls) {
     if (call.toolName === 'lights') {
       const room: string = call.input.room;

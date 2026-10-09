@@ -1,0 +1,117 @@
+@import "tailwindcss" source(".");
+
+@layer base {
+  :root {
+    font-synthesis: none;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid #000;
+    outline-offset: 4px;
+  }
+}
+
+@layer components {
+  .example-button {
+    @apply min-h-10 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-[15px] text-gray-600 hover:border-gray-400 hover:bg-gray-100 hover:text-black disabled:cursor-default disabled:opacity-45;
+  }
+}
+
+.track {
+  --track-color: #292929;
+}
+
+.track[data-track="snare"] {
+  --track-color: #c2a273;
+}
+
+.track[data-track="hats"] {
+  --track-color: #7c9b88;
+}
+
+.track[data-track="bass"] {
+  --track-color: #9a86bf;
+}
+
+.step {
+  color: #6b7280;
+  background: #f1f1f1;
+  border: 1px solid transparent;
+  transition: background-color 120ms;
+}
+
+.step:nth-child(4n + 1) {
+  border-left-color: #bfc0c3;
+}
+
+.step:hover {
+  border-color: var(--track-color);
+}
+
+.step[aria-pressed="true"] {
+  color: #111;
+  background: var(--track-color);
+}
+
+[data-track="kick"] .step[aria-pressed="true"] {
+  color: white;
+}
+
+.step[data-current="true"] {
+  box-shadow: 0 0 0 2px #000;
+}
+
+.track[data-silent="true"] .steps {
+  opacity: 0.4;
+}
+
+/* The lamp artwork shares its light state through SVG <use> instances. */
+.room svg {
+  width: 120px;
+  max-width: 100%;
+  margin: auto;
+  fill: white;
+  stroke: #9ca3af;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 180ms;
+}
+
+.beam {
+  opacity: var(--light-opacity, 0);
+  transition: opacity 180ms;
+}
+
+.bulb {
+  fill: var(--bulb-color, white);
+}
+
+.shade {
+  fill: #fff;
+}
+
+.room[data-on="true"] {
+  --light-opacity: 1;
+  --bulb-color: #ffe7a3;
+}
+
+.room[data-on="true"] svg {
+  stroke: #000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step,
+  .room svg,
+  .beam {
+    transition: none;
+  }
+
+  .step[data-current="true"] {
+    box-shadow: none;
+  }
+}

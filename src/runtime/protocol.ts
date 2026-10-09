@@ -9,7 +9,7 @@ export interface EngineConfig {
 }
 
 export type Command =
-  | { method: 'complete'; input: string; maxNewTokens: number }
+  | { method: 'complete'; input: string; maxNewTokens: number; toolsJson?: string }
   | { method: 'embed'; input: string }
   | { method: 'reset' };
 

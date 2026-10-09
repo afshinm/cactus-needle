@@ -7,6 +7,7 @@ import type {
   GenerateResult,
   Needle,
 } from '../types.js';
+import { serializeTools } from './configuration.js';
 import type { Command, Request, Response } from './protocol.js';
 
 export interface Transport {
@@ -89,25 +90,29 @@ export class RpcSession<Tools extends ToolCollection> implements Needle<Tools> {
     });
   }
 
-  async generate({
+  async generate<const RequestTools extends ToolCollection = Tools>({
     prompt,
+    tools,
     maxOutputTokens,
     abortSignal,
-  }: GenerateOptions): Promise<GenerateResult<Tools>> {
+  }: GenerateOptions<RequestTools>): Promise<GenerateResult<RequestTools>> {
     abortSignal?.throwIfAborted();
     const abort = () => {
       void this.close();
     };
     abortSignal?.addEventListener('abort', abort, { once: true });
     try {
-      const raw = await this.complete(
-        prompt,
-        maxOutputTokens === undefined ? {} : { maxNewTokens: maxOutputTokens },
-      );
+      const raw = await this.complete(prompt, {
+        ...(tools === undefined ? {} : { tools }),
+        ...(maxOutputTokens === undefined ? {} : { maxNewTokens: maxOutputTokens }),
+      });
       abortSignal?.throwIfAborted();
       if (!raw.success) throw new NeedleError('ENGINE_ERROR', raw.error ?? 'Generation failed.');
       const convert = (calls: CompletionResult['function_calls']) =>
-        calls.map((call) => ({ toolName: call.name, input: call.arguments })) as ToolCall<Tools>[];
+        calls.map((call) => ({
+          toolName: call.name,
+          input: call.arguments,
+        })) as ToolCall<RequestTools>[];
       return {
         toolCalls: convert(raw.function_calls),
         suppressedToolCalls: convert(raw.suppressed_calls),
@@ -131,7 +136,12 @@ export class RpcSession<Tools extends ToolCollection> implements Needle<Tools> {
       1,
       65_536,
     );
-    return (await this.#request({ method: 'complete', input, maxNewTokens })) as CompletionResult;
+    return (await this.#request({
+      method: 'complete',
+      input,
+      maxNewTokens,
+      ...(options.tools === undefined ? {} : { toolsJson: serializeTools(options.tools) }),
+    })) as CompletionResult;
   }
 
   async embed(input: string): Promise<Float32Array> {

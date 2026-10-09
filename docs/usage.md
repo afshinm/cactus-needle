@@ -11,12 +11,12 @@ Both entries expose the same session methods:
 
 | Method | Result |
 | --- | --- |
-| `generate({ prompt, maxOutputTokens?, abortSignal? })` | `{ toolCalls, suppressedToolCalls, confidence, reasoning, raw }` |
+| `generate({ prompt, tools?, maxOutputTokens?, abortSignal? })` | `{ toolCalls, suppressedToolCalls, confidence, reasoning, raw }` |
 | `embed(text)` | An independent `Float32Array`; 3072 dimensions with the pinned model |
 | `reset()` | Clears conversation history, retaining the model and tools |
 | `close()` | Terminates the worker and rejects outstanding calls; safe to call again |
 | `[Symbol.asyncDispose]()` | Equivalent to `close()`, for `await using` callers |
-| `complete(text, { maxNewTokens }?)` | The parsed upstream completion envelope; retained for compatibility |
+| `complete(text, { tools?, maxNewTokens? }?)` | The parsed upstream completion envelope; retained for compatibility |
 
 Shared creation options:
 
@@ -32,9 +32,27 @@ Shared creation options:
 `maxOutputTokens` takes precedence.
 
 Calls on a session run in arrival order. Each session has its own worker and
-WASM memory. Tools and system facts are fixed for that session. Keep a session
-for related turns; use `stateless: true` or `reset()` for independent requests.
-Call `close()` to release memory. Idle Node workers do not keep the process alive.
+WASM memory. Keep the session while your application needs the model, including
+when switching screens. Use `stateless: true` or `reset()` for independent
+requests. Call `close()` when finished to release memory. Idle Node workers do
+not keep the process alive.
+
+Pass `tools` to `generate()` to replace the creation-time defaults for that
+request. The result types follow the supplied tools. Omitting `tools` uses the
+creation-time defaults again; an empty object or array enables no tools.
+Changing schemas clears conversation history but retains the loaded model and
+worker. Unchanged schemas reuse the existing configuration. System facts stay
+fixed for the session.
+
+```js
+const needle = await createNeedle({ stateless: true });
+try {
+  await needle.generate({ prompt: 'Set the tempo to 128', tools: studioTools });
+  await needle.generate({ prompt: 'Turn on the kitchen lights', tools: lightTools });
+} finally {
+  await needle.close();
+}
+```
 
 ## Tool schemas
 
@@ -128,8 +146,10 @@ default model and bundled WASM always require their pinned checksums.
 
 ### Caching and offline use
 
-Later sessions reuse verified cached model and WASM bytes. A loaded session can
-run inference with the network disabled.
+Later sessions reuse verified cached model and WASM bytes, but each new session
+still initializes a worker and loads its own copy into memory. Reuse the same
+session to avoid that cost. A loaded session can run inference with the network
+disabled.
 
 `offline: true` prevents model and WASM downloads. Your application and worker
 JavaScript must still be available, for example through your application's

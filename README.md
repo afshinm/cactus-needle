@@ -47,7 +47,9 @@ try {
 ```
 
 The first load downloads the model from Hugging Face and caches it when browser
-storage is available. Your app decides which predicted tool calls to execute.
+storage is available. Reuse the session across requests; pass `tools` to
+`generate()` to change the available actions without reloading the model.
+Your app decides which predicted tool calls to execute.
 
 ## Node.js
 

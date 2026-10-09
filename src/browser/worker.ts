@@ -52,7 +52,7 @@ scope.onmessage = async ({ data: request }) => {
     let value: CompletionResult | Float32Array | undefined;
     switch (request.method) {
       case 'complete':
-        value = engine.complete(request.input, request.maxNewTokens);
+        value = engine.complete(request.input, request.maxNewTokens, request.toolsJson);
         break;
       case 'embed':
         value = engine.embed(request.input);

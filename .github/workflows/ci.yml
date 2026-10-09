@@ -83,6 +83,10 @@ jobs:
         if: runner.os == 'Linux' && matrix.node == '24'
         run: pnpm test:browser
 
+      - name: Build demo
+        if: runner.os == 'Linux' && matrix.node == '24'
+        run: pnpm exec vite build --config demo/vite.config.ts
+
       - name: Test installed npm package
         if: runner.os == 'Linux' && matrix.node == '24'
         run: pnpm test:pack

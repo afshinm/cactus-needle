@@ -1,5 +1,5 @@
 import { errorMessage, NeedleError, validateInteger, validateText } from '../errors.js';
-import { normalizeTools } from '../tools.js';
+import { normalizeTools, type ToolCollection } from '../tools.js';
 import type { SessionOptions } from '../types.js';
 import type { EngineConfig } from './protocol.js';
 
@@ -9,7 +9,16 @@ export function configuration(options: SessionOptions): EngineConfig {
   if (options.stateless !== undefined && typeof options.stateless !== 'boolean') {
     throw new NeedleError('INVALID_ARGUMENT', 'stateless must be a boolean.');
   }
-  const tools = normalizeTools(options.tools ?? []);
+  return {
+    system,
+    toolsJson: serializeTools(options.tools ?? []),
+    stateless: options.stateless ?? false,
+    bufferSize: validateInteger(options.bufferSize ?? 262_144, 'bufferSize', 1024, 16_777_216),
+  };
+}
+
+export function serializeTools(collection: ToolCollection): string {
+  const tools = normalizeTools(collection);
   const names = new Set<string>();
   for (const entry of tools) {
     if (!entry || typeof entry !== 'object')
@@ -32,9 +41,8 @@ export function configuration(options: SessionOptions): EngineConfig {
     }
     names.add(schema.name);
   }
-  let toolsJson: string;
   try {
-    toolsJson = JSON.stringify(tools, (_key, value: unknown) => {
+    return JSON.stringify(tools, (_key, value: unknown) => {
       if (
         typeof value === 'function' ||
         typeof value === 'symbol' ||
@@ -51,10 +59,4 @@ export function configuration(options: SessionOptions): EngineConfig {
       { cause },
     );
   }
-  return {
-    system,
-    toolsJson,
-    stateless: options.stateless ?? false,
-    bufferSize: validateInteger(options.bufferSize ?? 262_144, 'bufferSize', 1024, 16_777_216),
-  };
 }

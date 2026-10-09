@@ -46,10 +46,14 @@ export interface SessionOptions<Tools extends ToolCollection = ToolCollection> {
 
 export interface CompletionOptions {
   maxNewTokens?: number;
+  /** Replace the session's default tools for this request. Changing tools clears history. */
+  tools?: ToolCollection;
 }
 
-export interface GenerateOptions {
+export interface GenerateOptions<Tools extends ToolCollection = ToolCollection> {
   prompt: string;
+  /** Replace the session's default tools for this request without reloading the model. */
+  tools?: Tools;
   maxOutputTokens?: number;
   /** Aborting active inference closes the session and cancels its queued operations. */
   abortSignal?: AbortSignal;
@@ -65,7 +69,9 @@ export interface GenerateResult<Tools extends ToolCollection = ToolCollection> {
 }
 
 export interface Needle<Tools extends ToolCollection = ToolCollection> {
-  generate(options: GenerateOptions): Promise<GenerateResult<Tools>>;
+  generate<const RequestTools extends ToolCollection = Tools>(
+    options: GenerateOptions<RequestTools>,
+  ): Promise<GenerateResult<RequestTools>>;
   /** Infer tool calls locally. This method never executes the tools. Calls are serialized per instance. */
   complete(input: string, options?: CompletionOptions): Promise<CompletionResult>;
   embed(input: string): Promise<Float32Array>;

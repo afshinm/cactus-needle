@@ -75,6 +75,7 @@ function isCall(value: unknown): value is FunctionCall {
 
 export class Engine {
   readonly #output: number;
+  #toolsJson: string | undefined;
 
   private constructor(
     readonly module: WasmModule,
@@ -92,12 +93,21 @@ export class Engine {
     // Keep the archive allocation for the full worker lifetime: engines may read
     // tensor/tokenizer data in place. Terminating the worker reclaims all memory.
     if (module._needle_load(model, BigInt(data.length)) < 0) throw engine.#error('needle_load');
-    engine.#withString(config.system, (system) =>
-      engine.#withString(config.toolsJson, (tools) => {
-        if (module._needle_init(system, tools, 0) < 0) throw engine.#error('needle_init');
+    engine.#configureTools(config.toolsJson);
+    return engine;
+  }
+
+  #configureTools(toolsJson: string): void {
+    if (toolsJson === this.#toolsJson) return;
+    // Rebind the conversation prefix, retaining weights and WASM memory. If init
+    // fails, the next request must initialize again even with the previous tools.
+    this.#toolsJson = undefined;
+    this.#withString(this.config.system, (system) =>
+      this.#withString(toolsJson, (tools) => {
+        if (this.module._needle_init(system, tools, 0) < 0) throw this.#error('needle_init');
       }),
     );
-    return engine;
+    this.#toolsJson = toolsJson;
   }
 
   #allocate(size: number): number {
@@ -125,7 +135,12 @@ export class Engine {
     return new NeedleError('ENGINE_ERROR', `${operation} failed${detail ? `: ${detail}` : '.'}`);
   }
 
-  complete(input: string, maxNewTokens: number): CompletionResult {
+  complete(
+    input: string,
+    maxNewTokens: number,
+    toolsJson = this.config.toolsJson,
+  ): CompletionResult {
+    this.#configureTools(toolsJson);
     if (this.config.stateless) this.reset();
     return this.#withString(input, (pointer) => {
       this.module.HEAPU8[this.#output] = 0;
