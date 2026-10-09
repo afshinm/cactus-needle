@@ -2,6 +2,14 @@
   "name": "cactus-needle",
   "version": "0.3.0",
   "description": "Local Needle tool calling and Whistle speech transcription for browsers and Node.js, standalone or with Vercel AI SDK.",
+  "homepage": "https://github.com/afshinm/cactus-needle#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/afshinm/cactus-needle.git"
+  },
+  "bugs": {
+    "url": "https://github.com/afshinm/cactus-needle/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

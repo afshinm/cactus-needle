@@ -46,8 +46,15 @@ export interface SessionOptions<Tools extends ToolCollection = ToolCollection> {
 
 export interface CompletionOptions {
   maxNewTokens?: number;
+  /** Aborting active inference closes the session and cancels its queued operations. */
+  abortSignal?: AbortSignal;
   /** Replace the session's default tools for this request. Changing tools clears history. */
   tools?: ToolCollection;
+}
+
+export interface EmbedOptions {
+  /** Aborting active inference closes the session and cancels its queued operations. */
+  abortSignal?: AbortSignal;
 }
 
 export interface GenerateOptions<Tools extends ToolCollection = ToolCollection> {
@@ -73,8 +80,8 @@ export interface NeedleSession<Tools extends ToolCollection = ToolCollection> {
     options: GenerateOptions<RequestTools>,
   ): Promise<GenerateResult<RequestTools>>;
   /** Infer tool calls locally. This method never executes the tools. Calls are serialized per instance. */
-  complete(input: string, options?: CompletionOptions): Promise<CompletionResult>;
-  embed(input: string): Promise<Float32Array>;
+  complete(input?: string, options?: CompletionOptions): Promise<CompletionResult>;
+  embed(input?: string, options?: EmbedOptions): Promise<Float32Array>;
   /** Clear conversation history while retaining the model and tools. */
   reset(): Promise<void>;
   /** Stop the worker and reject outstanding calls. Safe to call more than once. */
@@ -103,7 +110,7 @@ export interface ExtractOptions {
 export interface Needle<Tools extends ToolCollection = ToolCollection>
   extends NeedleSession<Tools> {
   /** Execute registered tool functions and feed their results back, as in Python's Needle.run(). */
-  run(query: string, options?: RunOptions): Promise<RunResult>;
+  run(query?: string, options?: RunOptions): Promise<RunResult>;
   extract<const Schema extends JsonSchema | StandardJsonSchema>(
     text: string,
     schema: Schema,

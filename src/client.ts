@@ -1,5 +1,12 @@
-import { errorMessage, NeedleError, validateInteger, validateText } from './errors.js';
+import {
+  ExtractionValidationError,
+  errorMessage,
+  NeedleError,
+  validateInteger,
+  validateText,
+} from './errors.js';
 import { configuration } from './runtime/configuration.js';
+import { Resident } from './runtime/resident.js';
 import type { JsonSchema, JsonValue } from './schema.js';
 import {
   type InferSchema,
@@ -12,6 +19,7 @@ import {
 import type {
   CompletionOptions,
   CompletionResult,
+  EmbedOptions,
   ExtractOptions,
   GenerateOptions,
   GenerateResult,
@@ -21,81 +29,6 @@ import type {
   RunResult,
   SessionOptions,
 } from './types.js';
-
-/** Owns lazy loading and serializes whole operations, including multi-step tool runs. */
-export class Resident<Session extends { close(): Promise<void> }> {
-  readonly #lifetime = new AbortController();
-  #session: Promise<Session> | undefined;
-  #tail: Promise<unknown> = Promise.resolve();
-  #closing: Promise<void> | undefined;
-
-  constructor(private readonly load: (signal: AbortSignal) => Promise<Session>) {}
-
-  use<T>(
-    run: (session: Session, signal: AbortSignal) => Promise<T>,
-    signal?: AbortSignal,
-  ): Promise<T> {
-    if (signal?.aborted) return Promise.reject(signal.reason);
-    if (this.#lifetime.signal.aborted) return Promise.reject(this.#lifetime.signal.reason);
-    const cancel = () => {
-      void this.close();
-    };
-    signal?.addEventListener('abort', cancel, { once: true });
-    const stopped = this.#lifetime.signal;
-    let rejectClosed!: (reason: unknown) => void;
-    const closed = new Promise<never>((_resolve, reject) => {
-      rejectClosed = reject;
-    });
-    const onClose = () => rejectClosed(signal?.aborted ? signal.reason : stopped.reason);
-    stopped.addEventListener('abort', onClose, { once: true });
-    const operation = this.#tail.then(async () => {
-      stopped.throwIfAborted();
-      if (!this.#session) {
-        this.#session = this.load(stopped).catch((error) => {
-          this.#session = undefined;
-          throw error;
-        });
-      }
-      const session = await this.#session;
-      stopped.throwIfAborted();
-      const result = await run(session, stopped);
-      stopped.throwIfAborted();
-      return result;
-    });
-    this.#tail = operation.catch(() => {});
-    return Promise.race([operation, closed]).finally(() => {
-      signal?.removeEventListener('abort', cancel);
-      stopped.removeEventListener('abort', onClose);
-    });
-  }
-
-  ready(signal?: AbortSignal): Promise<void> {
-    return this.use(async () => {}, signal);
-  }
-
-  close(): Promise<void> {
-    if (!this.#closing) {
-      this.#lifetime.abort(new NeedleError('CLOSED', 'This model session was closed.'));
-      this.#closing =
-        this.#session?.then(
-          (session) => session.close(),
-          () => {},
-        ) ?? Promise.resolve();
-    }
-    return this.#closing;
-  }
-
-  [Symbol.asyncDispose](): Promise<void> {
-    return this.close();
-  }
-}
-
-export class ExtractionValidationError extends NeedleError {
-  override readonly name = 'ExtractionValidationError';
-  constructor(message = 'The model returned values that are not grounded in the input.') {
-    super('INVALID_RESPONSE', message);
-  }
-}
 
 function strictOption(strict: boolean | undefined): boolean {
   if (strict !== undefined && typeof strict !== 'boolean')
@@ -132,11 +65,11 @@ export class Agent<Tools extends ToolCollection = ToolCollection>
     return this.use(async (session) => {
       if (this.options.stateless) await session.reset();
       return session.complete(input, options);
-    });
+    }, options?.abortSignal);
   }
 
-  embed(input: string): Promise<Float32Array> {
-    return this.use((session) => session.embed(input));
+  embed(input = '', options?: EmbedOptions): Promise<Float32Array> {
+    return this.use((session) => session.embed(input), options?.abortSignal);
   }
 
   reset(): Promise<void> {
@@ -208,7 +141,7 @@ export class Agent<Tools extends ToolCollection = ToolCollection>
   ): Promise<InferSchema<Schema> | null> {
     validateText(text, 'text');
     const strict = strictOption(options.strict);
-    const definition = tool({ inputSchema: schema as JsonSchema });
+    const definition = tool({ inputSchema: schema });
     return this.use(async (session) => {
       await session.reset();
       const result = await session.complete(text, {

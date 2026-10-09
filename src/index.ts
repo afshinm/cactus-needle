@@ -1,6 +1,5 @@
-export { ExtractionValidationError } from './client.js';
 export type { NeedleErrorCode } from './errors.js';
-export { NeedleError } from './errors.js';
+export { ExtractionValidationError, NeedleError } from './errors.js';
 export type { NeedleSettings, WhistleSettings } from './node/api.js';
 export { close, extract, Needle, stream, transcribe, Whistle } from './node/api.js';
 export { DEFAULT_MODEL, downloadModel, getModelPath } from './node/model.js';
@@ -25,6 +24,7 @@ export { tool } from './tools.js';
 export type {
   CompletionOptions,
   CompletionResult,
+  EmbedOptions,
   ExtractOptions,
   FunctionCall,
   GenerateOptions,

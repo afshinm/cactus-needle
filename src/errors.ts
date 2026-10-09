@@ -22,6 +22,14 @@ export class NeedleError extends Error {
   }
 }
 
+export class ExtractionValidationError extends NeedleError {
+  override readonly name = 'ExtractionValidationError';
+
+  constructor(message = 'The model returned values that are not grounded in the input.') {
+    super('INVALID_RESPONSE', message);
+  }
+}
+
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

@@ -68,11 +68,11 @@ export type InferSchema<S> = S extends StandardJsonSchema
   ? NonNullable<S['~standard']['types']>['input']
   : SchemaType<S>;
 
-interface ToolOptions<Schema, Input = InferSchema<Schema>> {
+interface ToolOptions<Schema> {
   description?: string;
   inputSchema: Schema;
   triggers?: readonly string[];
-  execute?: Tool<Input>['execute'];
+  execute?: Tool<InferSchema<Schema>>['execute'];
 }
 
 const validators = new WeakMap<Tool, NonNullable<StandardJsonSchema['~standard']['validate']>>();
@@ -84,12 +84,10 @@ export async function validateToolInput(definition: Tool, input: unknown): Promi
 }
 
 /** Define a named tool's input once; its name comes from the tools object key. */
-export function tool<S extends StandardJsonSchema>(
+export function tool<const S extends JsonSchema | StandardJsonSchema>(
   options: ToolOptions<S>,
-): Tool<NonNullable<S['~standard']['types']>['input']>;
-export function tool<const S extends JsonSchema>(options: ToolOptions<S>): Tool<SchemaType<S>>;
-export function tool(options: ToolOptions<JsonSchema | StandardJsonSchema>): Tool {
-  let schema = options.inputSchema;
+): Tool<InferSchema<S>> {
+  let schema: JsonSchema | StandardJsonSchema = options.inputSchema;
   let validate: StandardJsonSchema['~standard']['validate'];
   if (!schema || typeof schema !== 'object')
     throw new NeedleError('INVALID_ARGUMENT', 'inputSchema must be an object schema.');

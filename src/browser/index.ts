@@ -1,6 +1,5 @@
-export { ExtractionValidationError } from '../client.js';
 export type { NeedleErrorCode } from '../errors.js';
-export { NeedleError } from '../errors.js';
+export { ExtractionValidationError, NeedleError } from '../errors.js';
 export { DEFAULT_MODEL, DEFAULT_SPEECH_MODEL } from '../runtime/artifacts.js';
 export type { JsonSchema, JsonValue, ToolDefinition, ToolSchema } from '../schema.js';
 export type {
@@ -20,6 +19,7 @@ export { tool } from '../tools.js';
 export type {
   CompletionOptions,
   CompletionResult,
+  EmbedOptions,
   ExtractOptions,
   FunctionCall,
   GenerateOptions,

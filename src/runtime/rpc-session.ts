@@ -11,6 +11,7 @@ import type { ToolCall, ToolCollection } from '../tools.js';
 import type {
   CompletionOptions,
   CompletionResult,
+  EmbedOptions,
   GenerateOptions,
   GenerateResult,
   NeedleSession,
@@ -86,19 +87,32 @@ export class RpcSession<Tools extends ToolCollection>
     return this.#closing;
   }
 
-  #request(command: Command): Promise<Result> {
-    if (this.#closed)
-      return Promise.reject(new NeedleError('CLOSED', 'This Needle instance is closed.'));
-    return new Promise((resolveResult, reject) => {
-      const id = this.#nextId++;
-      this.#pending.set(id, { resolve: resolveResult, reject });
-      this.transport.ref?.();
-      try {
-        this.transport.send({ ...command, id });
-      } catch (cause) {
-        this.#fail(new NeedleError('WORKER_ERROR', errorMessage(cause), { cause }));
-      }
-    });
+  async #request(command: Command, signal?: AbortSignal): Promise<Result> {
+    signal?.throwIfAborted();
+    if (this.#closed) throw new NeedleError('CLOSED', 'This model session is closed.');
+    const abort = () => {
+      void this.close();
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      const result = await new Promise<Result>((resolveResult, reject) => {
+        const id = this.#nextId++;
+        this.#pending.set(id, { resolve: resolveResult, reject });
+        this.transport.ref?.();
+        try {
+          this.transport.send({ ...command, id });
+        } catch (cause) {
+          this.#fail(new NeedleError('WORKER_ERROR', errorMessage(cause), { cause }));
+        }
+      });
+      signal?.throwIfAborted();
+      return result;
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason;
+      throw error;
+    } finally {
+      signal?.removeEventListener('abort', abort);
+    }
   }
 
   async generate<const RequestTools extends ToolCollection = Tools>({
@@ -108,38 +122,29 @@ export class RpcSession<Tools extends ToolCollection>
     abortSignal,
   }: GenerateOptions<RequestTools>): Promise<GenerateResult<RequestTools>> {
     abortSignal?.throwIfAborted();
-    const abort = () => {
-      void this.close();
+    const raw = await this.complete(prompt, {
+      ...(tools === undefined ? {} : { tools }),
+      ...(maxOutputTokens === undefined ? {} : { maxNewTokens: maxOutputTokens }),
+      ...(abortSignal === undefined ? {} : { abortSignal }),
+    });
+    abortSignal?.throwIfAborted();
+    if (!raw.success) throw new NeedleError('ENGINE_ERROR', raw.error ?? 'Generation failed.');
+    const convert = (calls: CompletionResult['function_calls']) =>
+      calls.map((call) => ({
+        toolName: call.name,
+        input: call.arguments,
+      })) as ToolCall<RequestTools>[];
+    return {
+      toolCalls: convert(raw.function_calls),
+      suppressedToolCalls: convert(raw.suppressed_calls),
+      confidence: raw.confidence,
+      reasoning: raw.reasoning,
+      raw,
     };
-    abortSignal?.addEventListener('abort', abort, { once: true });
-    try {
-      const raw = await this.complete(prompt, {
-        ...(tools === undefined ? {} : { tools }),
-        ...(maxOutputTokens === undefined ? {} : { maxNewTokens: maxOutputTokens }),
-      });
-      abortSignal?.throwIfAborted();
-      if (!raw.success) throw new NeedleError('ENGINE_ERROR', raw.error ?? 'Generation failed.');
-      const convert = (calls: CompletionResult['function_calls']) =>
-        calls.map((call) => ({
-          toolName: call.name,
-          input: call.arguments,
-        })) as ToolCall<RequestTools>[];
-      return {
-        toolCalls: convert(raw.function_calls),
-        suppressedToolCalls: convert(raw.suppressed_calls),
-        confidence: raw.confidence,
-        reasoning: raw.reasoning,
-        raw,
-      };
-    } catch (error) {
-      if (abortSignal?.aborted) throw abortSignal.reason;
-      throw error;
-    } finally {
-      abortSignal?.removeEventListener('abort', abort);
-    }
   }
 
-  async complete(input: string, options: CompletionOptions = {}): Promise<CompletionResult> {
+  async complete(input = '', options: CompletionOptions = {}): Promise<CompletionResult> {
+    options.abortSignal?.throwIfAborted();
     validateText(input, 'input');
     const maxNewTokens = validateInteger(
       options.maxNewTokens ?? this.maxNewTokens,
@@ -147,17 +152,21 @@ export class RpcSession<Tools extends ToolCollection>
       1,
       65_536,
     );
-    return (await this.#request({
-      method: 'complete',
-      input,
-      maxNewTokens,
-      ...(options.tools === undefined ? {} : { toolsJson: serializeTools(options.tools) }),
-    })) as CompletionResult;
+    return (await this.#request(
+      {
+        method: 'complete',
+        input,
+        maxNewTokens,
+        ...(options.tools === undefined ? {} : { toolsJson: serializeTools(options.tools) }),
+      },
+      options.abortSignal,
+    )) as CompletionResult;
   }
 
-  async embed(input: string): Promise<Float32Array> {
+  async embed(input = '', options: EmbedOptions = {}): Promise<Float32Array> {
+    options.abortSignal?.throwIfAborted();
     validateText(input, 'input');
-    return (await this.#request({ method: 'embed', input })) as Float32Array;
+    return (await this.#request({ method: 'embed', input }, options.abortSignal)) as Float32Array;
   }
 
   async transcribe(
@@ -166,20 +175,10 @@ export class RpcSession<Tools extends ToolCollection>
   ): Promise<TranscriptionResult> {
     abortSignal?.throwIfAborted();
     const settings = transcriptionSettings(options);
-    const abort = () => {
-      void this.close();
-    };
-    abortSignal?.addEventListener('abort', abort, { once: true });
-    try {
-      const result = await this.#request({ method: 'transcribe', audio, settings });
-      abortSignal?.throwIfAborted();
-      return result as TranscriptionResult;
-    } catch (error) {
-      if (abortSignal?.aborted) throw abortSignal.reason;
-      throw error;
-    } finally {
-      abortSignal?.removeEventListener('abort', abort);
-    }
+    return (await this.#request(
+      { method: 'transcribe', audio, settings },
+      abortSignal,
+    )) as TranscriptionResult;
   }
 
   async embedAudio(audio: AudioInput): Promise<Float32Array> {

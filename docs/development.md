@@ -137,7 +137,7 @@ when the matrix changes.
 
 | Directory | Responsibility |
 | --- | --- |
-| `src/runtime/` | Shared WASM engine, session RPC, configuration, and artifact metadata |
+| `src/runtime/` | Model lifecycle, WASM engine, session RPC, configuration, and artifact metadata |
 | `src/node/` | Filesystem provisioning, worker threads, and Node options |
 | `src/browser/` | Browser workers, asset caching, and browser options |
 | `src/ai-sdk/` | Provider wiring, language/embedding/transcription models, request preparation, and session cleanup |

@@ -29,32 +29,18 @@ function resolveUrl(value: string | URL, label: string): string {
 export async function createNeedle<const Tools extends ToolCollection = ToolCollection>(
   options: BrowserNeedleOptions<Tools> = {},
 ): Promise<Needle<Tools>> {
-  const agent = new Agent<Tools>(
+  return new Agent<Tools>(
     (signal) => loadSession({ ...options, stateless: false, abortSignal: signal }, 'needle3'),
     options,
-  );
-  try {
-    await agent.ready(options.abortSignal);
-    return agent;
-  } catch (error) {
-    await agent.close();
-    throw error;
-  }
+  ).ready(options.abortSignal);
 }
 
 /** Load and cache Whistle separately from the text model. Reuse this session for each recording. */
 export async function createWhistle(options: BrowserWhistleOptions = {}): Promise<Whistle> {
-  const speech = new SpeechClient(
+  return new SpeechClient(
     (signal) => loadSession({ ...options, abortSignal: signal }, 'whistle'),
     readAudio,
-  );
-  try {
-    await speech.ready(options.abortSignal);
-    return speech;
-  } catch (error) {
-    await speech.close();
-    throw error;
-  }
+  ).ready(options.abortSignal);
 }
 
 export async function loadSession<Tools extends ToolCollection>(

@@ -11,11 +11,11 @@ The methods follow the Python SDK, with promises and camelCase options:
 
 | Method | Result |
 | --- | --- |
-| `complete(text, { tools?, maxNewTokens? }?)` | The upstream completion envelope, including `function_calls` |
+| `complete(text, { tools?, maxNewTokens?, abortSignal? }?)` | The upstream completion envelope, including `function_calls` |
 | `run(text, { maxSteps?, strict?, abortSignal? }?)` | Executes registered tools and returns the final completion plus `results` |
 | `extract(text, schema, { strict?, abortSignal? }?)` | A typed record, or `null` when the model withholds a prediction |
 | `generate({ prompt, tools?, maxOutputTokens?, abortSignal? })` | `{ toolCalls, suppressedToolCalls, confidence, reasoning, raw }` |
-| `embed(text)` | An independent `Float32Array`; 3072 dimensions with the pinned model |
+| `embed(text, { abortSignal? }?)` | An independent `Float32Array`; 3072 dimensions with the pinned model |
 | `reset()` | Clears conversation history, retaining the model and tools |
 | `close()` | Terminates the worker and rejects outstanding calls; safe to call again |
 | `[Symbol.asyncDispose]()` | Equivalent to `close()`, for `await using` callers |
@@ -32,6 +32,7 @@ Shared creation options:
 
 `maxNewTokens` is an alias for the default token limit;
 `maxOutputTokens` takes precedence.
+`complete()`, `run()`, and text `embed()` default to an empty input, as in Python.
 
 Calls on a session run in arrival order. Each session has its own worker and
 WASM memory. Keep the session while your application needs the model, including
@@ -355,7 +356,7 @@ tool applies. Suppressed calls are reported in `suppressedToolCalls`.
 or negative `peak_ram_mb` measurements become `null`. A schema constrains the
 output shape; use confidence and grounding validation to assess predictions.
 
-Aborting an active `generate()`, `run()`, `extract()`, or speech operation terminates the session and rejects its queued
+Aborting an active `complete()`, `generate()`, `run()`, `extract()`, `embed()`, or speech operation terminates the session and rejects its queued
 work. Create a new session to continue. A signal already aborted before the
 call rejects without closing the session. Browser setup cancellation also
 terminates its worker. Abort reasons propagate to the caller.

@@ -10,101 +10,124 @@ import type {
 import type { InferSchema, StandardJsonSchema } from './tools.js';
 import type { ExtractOptions, Needle, SessionOptions } from './types.js';
 
+/** Keeps one default model and scopes models with custom loading settings to a single operation. */
+class DefaultModel<Options extends object, Model extends { close(): Promise<void> }> {
+  #model: Model | undefined;
+
+  constructor(private readonly create: (options?: Options) => Model) {}
+
+  #acquire(options: Options, signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    const custom = Object.values(options).some((value) => value !== undefined);
+    const model = custom ? this.create(options) : (this.#model ?? this.create());
+    if (!custom) this.#model = model;
+    return {
+      model,
+      release: async (error: unknown) => {
+        const closed =
+          signal?.aborted ||
+          (error instanceof NeedleError &&
+            (error.code === 'CLOSED' || error.code === 'WORKER_ERROR'));
+        if (custom) await model.close();
+        else if (closed && this.#model === model) {
+          this.#model = undefined;
+          await model.close();
+        }
+      },
+    };
+  }
+
+  async use<T>(
+    options: Options,
+    signal: AbortSignal | undefined,
+    run: (model: Model) => Promise<T>,
+  ): Promise<T> {
+    const { model, release } = this.#acquire(options, signal);
+    let failure: unknown;
+    try {
+      return await run(model);
+    } catch (error) {
+      failure = error;
+      throw error;
+    } finally {
+      await release(failure);
+    }
+  }
+
+  async *stream<T>(
+    options: Options,
+    signal: AbortSignal | undefined,
+    run: (model: Model) => AsyncIterable<T>,
+  ): AsyncIterableIterator<T> {
+    const { model, release } = this.#acquire(options, signal);
+    let failure: unknown;
+    try {
+      yield* run(model);
+    } catch (error) {
+      failure = error;
+      throw error;
+    } finally {
+      await release(failure);
+    }
+  }
+
+  async close(): Promise<void> {
+    const model = this.#model;
+    this.#model = undefined;
+    await model?.close();
+  }
+}
+
 /** Python-style helpers retain the default models; custom settings use a scoped session. */
 export function shortcuts<TextOptions extends SessionOptions, SpeechOptions extends object>(
   textModel: (options?: TextOptions) => Needle,
   speechModel: (options?: SpeechOptions) => Whistle,
 ) {
-  let text: Needle | undefined;
-  let speech: Whistle | undefined;
-  const closed = (error: unknown, signal?: AbortSignal) =>
-    signal?.aborted ||
-    (error instanceof NeedleError && ['CLOSED', 'WORKER_ERROR'].includes(error.code));
+  const text = new DefaultModel(textModel);
+  const speech = new DefaultModel(speechModel);
   return {
-    async *stream(
+    stream(
       chunks: AsyncIterable<Float32Array> | Iterable<Float32Array>,
-      options: StreamOptions & SpeechOptions = {} as StreamOptions & SpeechOptions,
+      options?: StreamOptions & SpeechOptions,
     ): AsyncIterableIterator<TranscriptionChunk> {
-      const { language, keywords, abortSignal, ...loading } = options;
-      abortSignal?.throwIfAborted();
-      const custom = Object.keys(loading).length > 0;
-      if (!custom) speech ??= speechModel();
-      const model = custom ? speechModel(loading as SpeechOptions) : (speech as Whistle);
-      try {
-        yield* model.stream(chunks, {
+      const { language, keywords, abortSignal, ...loading } = options ?? {};
+      return speech.stream(loading as SpeechOptions, abortSignal, (model) =>
+        model.stream(chunks, {
           ...(language === undefined ? {} : { language }),
           ...(keywords === undefined ? {} : { keywords }),
           ...(abortSignal === undefined ? {} : { abortSignal }),
-        });
-      } catch (error) {
-        if (!custom && closed(error, abortSignal) && speech === model) {
-          speech = undefined;
-          await model.close();
-        }
-        throw error;
-      } finally {
-        if (custom) await model.close();
-      }
+        }),
+      );
     },
-    async transcribe(
-      audio: AudioSource,
-      options: TranscribeOptions & SpeechOptions = {} as TranscribeOptions & SpeechOptions,
-    ) {
-      const { language, keywords, wordTimestamps, abortSignal, ...loading } = options;
-      abortSignal?.throwIfAborted();
-      const custom = Object.keys(loading).length > 0;
-      if (!custom) speech ??= speechModel();
-      const model = custom ? speechModel(loading as SpeechOptions) : (speech as Whistle);
-      try {
-        return await model.transcribe(audio, {
+    async transcribe(audio: AudioSource, options?: TranscribeOptions & SpeechOptions) {
+      const { language, keywords, wordTimestamps, abortSignal, ...loading } = options ?? {};
+      return speech.use(loading as SpeechOptions, abortSignal, (model) =>
+        model.transcribe(audio, {
           ...(language === undefined ? {} : { language }),
           ...(keywords === undefined ? {} : { keywords }),
           ...(wordTimestamps === undefined ? {} : { wordTimestamps }),
           ...(abortSignal === undefined ? {} : { abortSignal }),
-        });
-      } catch (error) {
-        if (!custom && closed(error, abortSignal) && speech === model) {
-          speech = undefined;
-          await model.close();
-        }
-        throw error;
-      } finally {
-        if (custom) await model.close();
-      }
+        }),
+      );
     },
 
     async extract<const Schema extends JsonSchema | StandardJsonSchema>(
       input: string,
       schema: Schema,
-      options: ExtractOptions & TextOptions = {} as ExtractOptions & TextOptions,
+      options?: ExtractOptions & TextOptions,
     ): Promise<InferSchema<Schema> | null> {
-      const { strict, maxNewTokens, abortSignal, ...loading } = options;
-      abortSignal?.throwIfAborted();
-      const custom = Object.keys(loading).length > 0;
-      if (!custom) text ??= textModel();
-      const model = custom ? textModel(loading as TextOptions) : (text as Needle);
-      try {
-        return await model.extract(input, schema, {
+      const { strict, maxNewTokens, abortSignal, ...loading } = options ?? {};
+      return text.use(loading as TextOptions, abortSignal, (model) =>
+        model.extract(input, schema, {
           ...(strict === undefined ? {} : { strict }),
           ...(maxNewTokens === undefined ? {} : { maxNewTokens }),
           ...(abortSignal === undefined ? {} : { abortSignal }),
-        });
-      } catch (error) {
-        if (!custom && closed(error, abortSignal) && text === model) {
-          text = undefined;
-          await model.close();
-        }
-        throw error;
-      } finally {
-        if (custom) await model.close();
-      }
+        }),
+      );
     },
 
     async close(): Promise<void> {
-      const models = [text, speech];
-      text = undefined;
-      speech = undefined;
-      await Promise.all(models.map((model) => model?.close()));
+      await Promise.all([text.close(), speech.close()]);
     },
   };
 }

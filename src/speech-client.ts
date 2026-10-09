@@ -1,6 +1,6 @@
-import { Resident } from './client.js';
 import { NeedleError } from './errors.js';
 import { transcriptionSettings } from './runtime/audio.js';
+import { Resident } from './runtime/resident.js';
 import type {
   AudioInput,
   AudioSource,
@@ -11,6 +11,7 @@ import type {
   TranscriptionResult,
   Whistle,
 } from './speech.js';
+import type { EmbedOptions } from './types.js';
 
 export type ReadAudio = (source: AudioSource, signal: AbortSignal) => Promise<AudioInput>;
 
@@ -27,6 +28,7 @@ export class SpeechClient extends Resident<SpeechSession> implements Whistle {
     audio: AudioSource,
     options: TranscribeOptions = {},
   ): Promise<TranscriptionResult> {
+    options.abortSignal?.throwIfAborted();
     this.#available();
     const settings = transcriptionSettings(options);
     return this.use(async (session, signal) => {
@@ -36,10 +38,8 @@ export class SpeechClient extends Resident<SpeechSession> implements Whistle {
     }, options.abortSignal);
   }
 
-  async embed(
-    audio: AudioSource,
-    options: { abortSignal?: AbortSignal } = {},
-  ): Promise<Float32Array> {
+  async embed(audio: AudioSource, options: EmbedOptions = {}): Promise<Float32Array> {
+    options.abortSignal?.throwIfAborted();
     this.#available();
     return this.use(async (session, signal) => {
       const input = await this.read(audio, signal);
@@ -49,6 +49,7 @@ export class SpeechClient extends Resident<SpeechSession> implements Whistle {
   }
 
   #available(): void {
+    this.assertOpen();
     if (this.#stream)
       throw new NeedleError(
         'INVALID_ARGUMENT',
@@ -114,7 +115,7 @@ export class SpeechClient extends Resident<SpeechSession> implements Whistle {
       }
       this.#stream = undefined;
       if (iterator?.return) {
-        const cleanup = Promise.resolve(iterator.return());
+        const cleanup = Promise.resolve().then(() => iterator?.return?.());
         if (signal.aborted) void cleanup.catch(() => {});
         else await cleanup;
       }

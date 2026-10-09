@@ -33,6 +33,9 @@ async function usage() {
   await transcribe(new Float32Array(16_000), { offline: true });
   for await (const part of speech.stream([new Float32Array(16_000)])) console.log(part.pending);
   const lazy = new Needle({ weights: '/models/needle3.cact' });
+  await lazy.complete(undefined, { abortSignal: new AbortController().signal });
+  await lazy.embed(undefined, { abortSignal: new AbortController().signal });
+  await lazy.run();
   await lazy.close();
   await speech.close();
   // @ts-expect-error Browser speech constructors do not accept filesystem paths.

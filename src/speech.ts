@@ -1,5 +1,7 @@
 /// <reference lib="esnext.disposable" preserve="true" />
 
+import type { EmbedOptions } from './types.js';
+
 /** Mono float samples in [-1, 1]. */
 export interface PcmAudio {
   samples: Float32Array;
@@ -61,7 +63,7 @@ export interface Whistle {
   /** At most 30 seconds. WAV channels are mixed to mono and resampled to 16 kHz. */
   transcribe(audio: AudioSource, options?: TranscribeOptions): Promise<TranscriptionResult>;
   /** Flattened encoder features, one row per 80 ms frame. */
-  embed(audio: AudioSource, options?: { abortSignal?: AbortSignal }): Promise<Float32Array>;
+  embed(audio: AudioSource, options?: EmbedOptions): Promise<Float32Array>;
   /** Live 16 kHz mono chunks, usually one second each. Only one stream per session. */
   stream(
     chunks: AsyncIterable<Float32Array> | Iterable<Float32Array>,
