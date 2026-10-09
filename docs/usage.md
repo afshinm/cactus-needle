@@ -60,7 +60,7 @@ try {
 ## Tool schemas
 
 Use the standalone `tool()` helper with plain JSON Schema, as shown in the
-[browser quick start](../README.md#browser), or with a library that implements
+[tool calling example](../README.md#tool-calling), or with a library that implements
 [Standard JSON Schema](https://standardschema.dev/json-schema). No schema library
 is required. For example, Zod 4.2+ preserves inferred input types:
 

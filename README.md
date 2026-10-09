@@ -1,12 +1,12 @@
 # cactus-needle
 
-Run [Needle](https://github.com/cactus-compute/needle) and
-[Whistle](https://www.cactuscompute.com/blog/whistle) locally in a browser or Node.js.
-Tool calling, structured extraction, embeddings, and speech to text, with a
-standalone API familiar to Python users and a [Vercel AI SDK](https://ai-sdk.dev/) provider.
+Local tool calling, structured extraction, embeddings, and speech transcription
+for JavaScript and TypeScript, powered by [Needle](https://github.com/cactus-compute/needle)
+and [Whistle](https://www.cactuscompute.com/blog/whistle).
 
-Needle is 35.3 MB; Whistle is 16.9 MB. Each downloads when needed and runs in a
-WebAssembly worker on the CPU. Inference needs no API key, server, or GPU.
+Both models run in Node.js and browsers, on the CPU in WebAssembly workers.
+Use the standalone API or the optional [Vercel AI SDK](https://ai-sdk.dev/) provider.
+Inference needs no API key, server, or GPU.
 
 ![The standalone client and AI SDK provider run Needle and Whistle in local workers.](docs/runtime.svg)
 
@@ -16,26 +16,41 @@ WebAssembly worker on the CPU. Inference needs no API key, server, or GPU.
 npm install cactus-needle
 ```
 
-## Speech to text
+## Environments
+
+Choose imports for your environment. Text and speech are available in both.
+
+| Environment | Standalone | AI SDK provider |
+| --- | --- | --- |
+| Node.js 22.18+ | `cactus-needle` | `cactus-needle/ai-sdk` |
+| Browser | `cactus-needle/browser` | `cactus-needle/ai-sdk/browser` |
+
+Browsers require HTTPS or localhost, WebAssembly, and module workers. Vite
+handles the packaged worker and WASM assets; see [browser setup](docs/usage.md#browser-loading)
+for other bundlers.
+
+## Capabilities
+
+| Capability | Model | Standalone methods |
+| --- | --- | --- |
+| Tool calling | Needle | `complete()`, `generate()`, `run()` |
+| [Structured extraction](docs/usage.md#extraction) | Needle | `extract()` |
+| [Text embeddings](docs/usage.md#sessions) | Needle | `embed()` |
+| [Speech transcription](docs/usage.md#speech) | Whistle | `transcribe()` |
+| [Live transcription](docs/usage.md#live-transcription) | Whistle | `stream()` |
+| [Audio encoder features](docs/usage.md#speech) | Whistle | `embed()` |
+
+The standalone examples below use Node.js imports. For browsers, import the
+same names from `cactus-needle/browser`; the methods are the same.
+
+### Tool calling
+
+Define the actions your application supports. Needle selects tools and fills
+their arguments from the user's request. It is intended for tools and structured
+data, not general chat.
 
 ```js
-import * as needle from 'cactus-needle';
-
-console.log((await needle.transcribe('clip.wav')).text);
-await needle.close();
-```
-
-Like Python's `needle.transcribe()`, the helper loads and reuses Whistle. It accepts
-WAV files or PCM samples, up to 30 seconds per call. In browsers, import from
-`cactus-needle/browser` and pass a URL, `File`, or samples. See the
-[speech guide](docs/usage.md#speech) for streaming, languages, and word timestamps.
-
-## Browser
-
-Requires HTTPS or localhost. Tested with Vite and Chromium.
-
-```js
-import { Needle, tool } from 'cactus-needle/browser';
+import { Needle, tool } from 'cactus-needle';
 
 const needle = new Needle({
   tools: {
@@ -59,42 +74,59 @@ try {
 }
 ```
 
-The first call downloads the model from Hugging Face and caches it when browser
-storage is available. Reuse the session across requests; pass `tools` to
-`complete()` or `generate()` to change the available actions without reloading.
-To execute tools and feed their results back to Needle, add an `execute` callback
-to each tool and call [`needle.run(text)`](docs/usage.md#running-tools).
+`complete()` and `generate()` return predictions. To execute them and feed results
+back to the model, add an `execute` callback to each tool and call
+[`needle.run(text)`](docs/usage.md#running-tools).
 
-## Node.js
-
-Requires Node.js 22.18+.
+### Speech to text
 
 ```js
-import { Needle } from 'cactus-needle';
-
-const needle = new Needle();
+import * as needle from 'cactus-needle';
 
 try {
-  const embedding = await needle.embed('kitchen lights');
-  console.log(embedding.length); // 3072
+  console.log((await needle.transcribe('clip.wav')).text);
 } finally {
   await needle.close();
 }
 ```
 
-The constructor loads on first use and reuses cached weights. Pass `weights` for
-a local model or `download: false` for offline setup. Node supports the same
-tools and methods as the browser.
+Like Python's `needle.transcribe()`, this helper loads and reuses Whistle.
+It accepts uncompressed WAV or PCM samples, up to 30 seconds per call.
+In Node.js, a string names a local file; in a browser, it names an audio URL.
+Browsers also accept a `File` from a file input. Decode MP3, WebM, and other
+compressed formats to PCM first.
+
+Use `new Whistle()` to manage your own speech session. See the
+[speech guide](docs/usage.md#speech) for live transcription, supported languages,
+word timestamps, and audio features.
+
+## Model loading
+
+Standalone constructors and shared helpers load on first use. Needle's default
+weights are 35.3 MB; Whistle's are 16.9 MB. Only the model you use is loaded.
+Missing default weights download from Hugging Face and are cached on disk in
+Node.js, or in browser storage when available.
+
+Keep an instance while your application needs it, then call `close()`. Changing
+tools on that instance keeps the model loaded. Top-level `transcribe()`, `stream()`,
+and `extract()` share default models; top-level `close()` releases them.
+
+For custom weights, offline use, and the eager `createNeedle()` / `createWhistle()`
+factories, see [Node.js loading](docs/usage.md#nodejs-loading) or
+[browser loading](docs/usage.md#browser-loading).
 
 ## Vercel AI SDK
 
-Supports AI SDK 6 and 7. Install the SDK and, for this example, Zod:
+An optional integration for the same local models. Supports AI SDK 6
+and 7. Standalone users do not need `ai`.
+
+Install the SDK and, for this example, Zod:
 
 ```sh
 npm install ai zod
 ```
 
-This example runs in Node.js:
+In Node.js, provision weights before using the provider:
 
 ```ts
 import { generateText } from 'ai';
@@ -119,31 +151,14 @@ const { toolCalls } = await generateText({
 console.log(toolCalls);
 ```
 
-The provider handles worker cleanup. See the [AI SDK guide](docs/ai-sdk.md) for
-browser setup, structured output, embeddings, and `needle.transcriptionModel('whistle')`.
-Standalone users do not need `ai`.
+In browsers, import `createNeedle` from `cactus-needle/ai-sdk/browser` and use
+`createNeedle()`; default weights download and cache on first use. The provider
+creates and closes a worker for each SDK request.
 
-## Imports
-
-| Use | Import from |
-| --- | --- |
-| Standalone, Node.js | `cactus-needle` |
-| Standalone, browser | `cactus-needle/browser` |
-| AI SDK, Node.js | `cactus-needle/ai-sdk` |
-| AI SDK, browser | `cactus-needle/ai-sdk/browser` |
-
-`new Needle()` and `new Whistle()` load lazily. The existing standalone factories
-`await createNeedle()` and `await createWhistle()` load immediately; in Node they
-use already-provisioned weights. The AI SDK's `createNeedle()` creates a provider.
-
-## Limits
-
-- Needle handles tool calls and extraction, not free-form chat or images.
-- Whistle accepts uncompressed WAV or mono PCM. Decode MP3, WebM, and other
-  compressed formats before passing them to the standalone client.
-- The AI SDK provider accepts one user turn plus optional system messages.
-  Use standalone `run()` for Needle's tool loop.
-- Text streaming is buffered. Whistle's standalone `stream()` processes live audio chunks.
+The adapter supports tool calling, structured output, text embeddings, and batch
+transcription through `needle.transcriptionModel('whistle')`. It accepts one user
+turn plus optional system messages; text streaming is buffered. Use the standalone
+API for tool loops and live audio. See the [AI SDK guide](docs/ai-sdk.md) for examples.
 
 ## Documentation
 
@@ -153,5 +168,5 @@ use already-provisioned weights. The AI SDK's `createNeedle()` creates a provide
 
 ## License
 
-Apache-2.0. An independent wrapper for Cactus Compute's Needle. See
+Apache-2.0. An independent wrapper for Cactus Compute's Needle and Whistle. See
 [LICENSE](LICENSE), [NOTICE](NOTICE), and the [upstream license](vendor/LICENSE).

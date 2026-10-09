@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { UnsupportedFunctionalityError } from '@ai-sdk/provider';
 import { transcribe } from 'ai';
-import { experimental_transcribe as transcribeV6 } from 'ai-v6';
+import { NoTranscriptGeneratedError, experimental_transcribe as transcribeV6 } from 'ai-v6';
 import { NeedleTranscriptionModel } from '../dist/ai-sdk/transcription-model.js';
 import { Engine } from '../dist/runtime/engine.js';
 import { wav } from './fixtures/audio.mjs';
@@ -158,6 +158,27 @@ for (const [version, sdk] of [
     assert.equal(result.language, 'en');
     assert.equal(result.durationInSeconds, 1);
     assert.deepEqual(result.segments, [{ text: 'Kitchen', startSecond: 0.1, endSecond: 0.4 }]);
+    assert.equal(closed, 1);
+  });
+
+  test(`AI SDK ${version} handles empty transcripts and still closes the worker`, async () => {
+    let closed = 0;
+    const model = new NeedleTranscriptionModel('whistle', async () => ({
+      async transcribe() {
+        return { ...transcript, text: '', language: '', words: [] };
+      },
+      async close() {
+        closed++;
+      },
+    }));
+    const pending = sdk({ model, audio: wav(new Float32Array(16_000)), maxRetries: 0 });
+    if (version === '6') {
+      await assert.rejects(pending, NoTranscriptGeneratedError.isInstance);
+    } else {
+      const result = await pending;
+      assert.equal(result.text, '');
+      assert.deepEqual(result.segments, []);
+    }
     assert.equal(closed, 1);
   });
 }

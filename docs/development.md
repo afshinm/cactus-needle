@@ -56,8 +56,15 @@ and [Ableton Learning Music](https://learningmusic.ableton.com/make-beats/make-b
 Its schemas follow [Needle's tool-design guide](https://www.cactuscompute.com/blog/designing-tools-for-needle),
 and its audio uses the [Web Audio lookahead scheduling pattern](https://web.dev/articles/audio-scheduling).
 
-The `Demo` workflow publishes `demo/dist` on pushes to `main`. Set the repository's
-Pages source to **GitHub Actions** in Settings → Pages. No API keys are needed.
+The `Demo` workflow builds `demo/` and publishes `demo/dist` on pushes to `main`.
+It uses the Pages base path for assets, including the worker and WASM.
+
+In **Settings → Pages → Build and deployment**, set **Source** to **GitHub Actions**.
+The branch publishing directory picker only supports `/` and `/docs`; it cannot
+select `demo/` or build its TypeScript. Leaving branch publishing enabled starts
+a second Jekyll deployment that can overwrite the demo. The workflow checks this
+setting before building. After changing it, run **Actions → Demo → Run workflow**
+to publish the site. No API keys are needed.
 
 ## Build and lint
 

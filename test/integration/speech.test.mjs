@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { transcribe } from 'ai';
-import { experimental_transcribe as transcribeV6 } from 'ai-v6';
+import { NoTranscriptGeneratedError, experimental_transcribe as transcribeV6 } from 'ai-v6';
 import { createNeedle } from '../../dist/ai-sdk/index.js';
 import { createWhistle, getModelPath, transcribe as oneShot, Whistle } from '../../dist/index.js';
 import { wav } from '../fixtures/audio.mjs';
@@ -58,13 +58,19 @@ for (const [version, sdk] of [
   ['7', transcribe],
   ['6', transcribeV6],
 ]) {
-  test(`AI SDK ${version} runs real Whistle transcription`, async () => {
+  test(`AI SDK ${version} handles real Whistle silence`, async () => {
     const provider = createNeedle({ speech: { modelPath: weights } });
-    const result = await sdk({
+    const pending = sdk({
       model: provider.transcriptionModel(),
       audio: wav(silence),
       maxRetries: 0,
     });
+    // SDK 6 rejects empty text; SDK 7 accepts silence as a valid transcript.
+    if (version === '6') {
+      await assert.rejects(pending, NoTranscriptGeneratedError.isInstance);
+      return;
+    }
+    const result = await pending;
     assert.equal(result.text, '');
     assert.equal(result.durationInSeconds, 1);
     assert.deepEqual(result.segments, []);

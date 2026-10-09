@@ -136,6 +136,8 @@ console.log(result.text, result.segments);
 ```
 
 With AI SDK 6, import `experimental_transcribe as transcribe` from `ai`.
+AI SDK 6 throws `NoTranscriptGeneratedError` when Whistle returns an empty
+transcript for silence; AI SDK 7 and the standalone API return empty text.
 The result includes word segments, detected language, audio duration, and
 `providerMetadata.needle` timing fields. Word timestamps are enabled by default
 for SDK transcription. Omit `language` to detect it automatically.

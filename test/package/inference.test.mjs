@@ -13,6 +13,7 @@ import { launchBrowser } from '../browser/launcher.mjs';
 
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
+const networkPreload = new URL('../fixtures/deny-network.mjs', import.meta.url).href;
 const metadata = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const manifest = JSON.parse(await readFile(join(root, 'vendor/manifest.json'), 'utf8'));
 const pinned = join(root, '.cache', manifest.revision, manifest.model.path);
@@ -244,7 +245,7 @@ void result; void vector;
     );
     const result = await exec(
       process.execPath,
-      ['--import', join(root, 'test/fixtures/deny-network.mjs'), 'smoke.mjs', modelPath],
+      ['--import', networkPreload, 'smoke.mjs', modelPath],
       { cwd: consumer, timeout: 30_000 },
     );
     console.log(result.stdout.trim());
@@ -276,7 +277,7 @@ console.log('Installed tarball: AI SDK 6 and 7 inference passed with networking 
     );
     const sdkResult = await exec(
       process.execPath,
-      ['--import', join(root, 'test/fixtures/deny-network.mjs'), 'sdk-smoke.mjs', modelPath],
+      ['--import', networkPreload, 'sdk-smoke.mjs', modelPath],
       { cwd: consumer, timeout: 30_000 },
     );
     console.log(sdkResult.stdout.trim());
