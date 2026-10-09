@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="176" viewBox="0 0 720 176" role="img" aria-labelledby="title description">
-  <title id="title">Two APIs, one local model</title>
-  <desc id="description">In a browser or Node.js, your application uses the standalone client or the AI SDK provider. Both run Needle 3 in a local WebAssembly worker.</desc>
+  <title id="title">Two APIs, local inference</title>
+  <desc id="description">In a browser or Node.js, your application uses the standalone client or the AI SDK provider. Both run Needle and Whistle in local WebAssembly workers.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 8 4 L 0 8 Z" fill="#64748b"/>
@@ -25,8 +25,8 @@
       <text x="92" y="109">Your app</text>
       <text x="324" y="77">Standalone client</text>
       <text x="324" y="141">AI SDK provider</text>
-      <text x="599" y="97" font-weight="600">Needle 3</text>
+      <text x="599" y="97" font-weight="600">Needle / Whistle</text>
     </g>
-    <text x="599" y="120" text-anchor="middle" font-size="14" fill="#334155">Local WASM worker</text>
+    <text x="599" y="120" text-anchor="middle" font-size="14" fill="#334155">Local WASM workers</text>
   </g>
 </svg>

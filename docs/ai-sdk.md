@@ -3,9 +3,10 @@
 Needle is available as a standard AI SDK provider and as a standalone client.
 Both use the same local WebAssembly engine. No hosted inference API is involved.
 
-The provider implements the V3 language/embedding contracts accepted by AI SDK
-6 and 7. Tested with `ai@6.0.302` and `ai@7.0.136` in Node and Chromium, including
-Vite development and production builds. The SDK contracts and conversion are
+The provider implements the V3 language, embedding, and transcription contracts
+accepted by AI SDK 6 and 7. Language and embedding inference have been tested with
+`ai@6.0.302` and `ai@7.0.136` in Node and Chromium, including Vite development and
+production builds. The SDK contracts and conversion are
 documented in the [provider guide](https://ai-sdk.dev/providers/community-providers/custom-providers)
 and [AI SDK source](https://github.com/vercel/ai/blob/main/packages/ai/src/model/as-language-model-v4.ts).
 
@@ -88,7 +89,8 @@ still use the model ID `needle3`.
 | `generateText` / `streamText` with `Output.object({ schema })` | Structured extraction into an object |
 | `embed({ model: needle.embeddingModel(), value })` | One local embedding |
 | `embedMany({ model: needle.embeddingModel(), values })` | Embeddings in input order; one worker for the batch |
-| `createProviderRegistry({ needle })` | Language and embedding models as `needle:needle3` |
+| `transcribe({ model: needle.transcriptionModel(), audio })` | Local Whistle transcription of uncompressed WAV |
+| `createProviderRegistry({ needle })` | Language/embedding models as `needle:needle3`; transcription as `needle:whistle` |
 
 ```ts
 import { embed, generateText, Output } from 'ai';
@@ -113,6 +115,42 @@ SDK tool includes `execute`, AI SDK runs it after accepting and validating the
 model's tool call. Tool callbacks and any SDK telemetry are controlled by your
 application.
 
+## Transcription
+
+```js
+import { readFile } from 'node:fs/promises';
+import { transcribe } from 'ai';
+import { downloadModel } from 'cactus-needle';
+import { createNeedle } from 'cactus-needle/ai-sdk';
+
+const modelPath = await downloadModel({ model: 'whistle' });
+const needle = createNeedle({ speech: { modelPath } });
+const result = await transcribe({
+  model: needle.transcriptionModel('whistle'),
+  audio: await readFile('clip.wav'),
+  providerOptions: {
+    needle: { language: 'en', keywords: ['Siobhán'], wordTimestamps: true },
+  },
+});
+console.log(result.text, result.segments);
+```
+
+With AI SDK 6, import `experimental_transcribe as transcribe` from `ai`.
+The result includes word segments, detected language, audio duration, and
+`providerMetadata.needle` timing fields. Word timestamps are enabled by default
+for SDK transcription. Omit `language` to detect it automatically.
+
+In browsers, use `cactus-needle/ai-sdk/browser` and supply WAV bytes from your file
+input. Default Whistle weights download and cache on first use. Override them with
+`createNeedle({ speech: { model: '/models/whistle.cact' } })`. Text weights passed
+at the provider's top level never apply to speech; shared cache and WASM settings do.
+
+The provider accepts uncompressed WAV, up to 30 seconds, in the seven
+[supported languages](usage.md#speech). Convert compressed recordings to WAV
+before calling the SDK, or use the standalone API with decoded PCM samples.
+Live chunk transcription is available through standalone `Whistle.stream()`;
+this provider's V3 contract exposes batch transcription only.
+
 ## Lifecycle and supported inputs
 
 Each SDK request creates and closes its own inference worker. Callers do not
@@ -128,9 +166,9 @@ results, so the binding rejects those rather than dropping them. Multi-step
 agent loops that send tool results back to Needle are not supported. Initial
 SDK tool execution still works normally.
 
-Needle is a tool-calling/extraction model. Free-form chat, images/audio/files,
+Needle is a tool-calling/extraction model. Free-form chat, images/audio/files in text requests,
 provider-hosted tools, and mixing function tools with structured output in one
-request are unsupported. Structured output needs an object JSON Schema and uses
+request are unsupported. Use `transcriptionModel()` for audio. Structured output needs an object JSON Schema and uses
 the engine's supported schema subset. AI SDK validates the final output.
 
 `streamText` emits content after inference completes, with a compatibility

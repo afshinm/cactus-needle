@@ -1,13 +1,14 @@
 # cactus-needle
 
-Run [Needle 3](https://github.com/cactus-compute/needle) locally in a browser or
-Node.js for tool calling, structured extraction, and text embeddings. Use it directly
-or as a [Vercel AI SDK](https://ai-sdk.dev/) provider.
+Run [Needle](https://github.com/cactus-compute/needle) and
+[Whistle](https://www.cactuscompute.com/blog/whistle) locally in a browser or Node.js.
+Tool calling, structured extraction, embeddings, and speech to text, with a
+standalone API familiar to Python users and a [Vercel AI SDK](https://ai-sdk.dev/) provider.
 
-The 35.3 MB model downloads separately and runs in a WebAssembly worker on the
-CPU. Inference needs no API key, server, or GPU.
+Needle is 35.3 MB; Whistle is 16.9 MB. Each downloads when needed and runs in a
+WebAssembly worker on the CPU. Inference needs no API key, server, or GPU.
 
-![The standalone client and AI SDK provider both run Needle 3 in a local worker, in your browser or Node.js.](docs/runtime.svg)
+![The standalone client and AI SDK provider run Needle and Whistle in local workers.](docs/runtime.svg)
 
 ## Install
 
@@ -15,14 +16,28 @@ CPU. Inference needs no API key, server, or GPU.
 npm install cactus-needle
 ```
 
+## Speech to text
+
+```js
+import * as needle from 'cactus-needle';
+
+console.log((await needle.transcribe('clip.wav')).text);
+await needle.close();
+```
+
+Like Python's `needle.transcribe()`, the helper loads and reuses Whistle. It accepts
+WAV files or PCM samples, up to 30 seconds per call. In browsers, import from
+`cactus-needle/browser` and pass a URL, `File`, or samples. See the
+[speech guide](docs/usage.md#speech) for streaming, languages, and word timestamps.
+
 ## Browser
 
 Requires HTTPS or localhost. Tested with Vite and Chromium.
 
 ```js
-import { createNeedle, tool } from 'cactus-needle/browser';
+import { Needle, tool } from 'cactus-needle/browser';
 
-const needle = await createNeedle({
+const needle = new Needle({
   tools: {
     set_lights: tool({
       description: 'Turn the lights in a room on or off.',
@@ -36,30 +51,28 @@ const needle = await createNeedle({
 });
 
 try {
-  const { toolCalls } = await needle.generate({
-    prompt: 'Turn on the kitchen lights',
-  });
-  console.log(toolCalls);
-  // [{ toolName: 'set_lights', input: { room: 'kitchen', on: true } }]
+  const result = await needle.complete('Turn on the kitchen lights');
+  console.log(result.function_calls);
+  // [{ name: 'set_lights', arguments: { room: 'kitchen', on: true } }]
 } finally {
   await needle.close();
 }
 ```
 
-The first load downloads the model from Hugging Face and caches it when browser
+The first call downloads the model from Hugging Face and caches it when browser
 storage is available. Reuse the session across requests; pass `tools` to
-`generate()` to change the available actions without reloading the model.
-Your app decides which predicted tool calls to execute.
+`complete()` or `generate()` to change the available actions without reloading.
+To execute tools and feed their results back to Needle, add an `execute` callback
+to each tool and call [`needle.run(text)`](docs/usage.md#running-tools).
 
 ## Node.js
 
 Requires Node.js 22.18+.
 
 ```js
-import { createNeedle, downloadModel } from 'cactus-needle';
+import { Needle } from 'cactus-needle';
 
-const modelPath = await downloadModel();
-const needle = await createNeedle({ modelPath });
+const needle = new Needle();
 
 try {
   const embedding = await needle.embed('kitchen lights');
@@ -69,8 +82,9 @@ try {
 }
 ```
 
-`downloadModel()` reuses cached weights. Node supports the same tools and
-`generate()` API as the browser.
+The constructor loads on first use and reuses cached weights. Pass `weights` for
+a local model or `download: false` for offline setup. Node supports the same
+tools and methods as the browser.
 
 ## Vercel AI SDK
 
@@ -106,7 +120,8 @@ console.log(toolCalls);
 ```
 
 The provider handles worker cleanup. See the [AI SDK guide](docs/ai-sdk.md) for
-browser setup, structured output, and embeddings. Standalone users do not need `ai`.
+browser setup, structured output, embeddings, and `needle.transcriptionModel('whistle')`.
+Standalone users do not need `ai`.
 
 ## Imports
 
@@ -117,15 +132,18 @@ browser setup, structured output, and embeddings. Standalone users do not need `
 | AI SDK, Node.js | `cactus-needle/ai-sdk` |
 | AI SDK, browser | `cactus-needle/ai-sdk/browser` |
 
-The standalone `createNeedle()` loads a session and must be awaited. The AI SDK
-version creates a provider.
+`new Needle()` and `new Whistle()` load lazily. The existing standalone factories
+`await createNeedle()` and `await createWhistle()` load immediately; in Node they
+use already-provisioned weights. The AI SDK's `createNeedle()` creates a provider.
 
 ## Limits
 
-- Free-form chat, audio, and images are unsupported.
+- Needle handles tool calls and extraction, not free-form chat or images.
+- Whistle accepts uncompressed WAV or mono PCM. Decode MP3, WebM, and other
+  compressed formats before passing them to the standalone client.
 - The AI SDK provider accepts one user turn plus optional system messages.
-  Agent loops that send tool results back to the model are unsupported.
-- Streaming is buffered; results arrive when inference finishes.
+  Use standalone `run()` for Needle's tool loop.
+- Text streaming is buffered. Whistle's standalone `stream()` processes live audio chunks.
 
 ## Documentation
 

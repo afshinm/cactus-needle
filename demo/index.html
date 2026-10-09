@@ -69,9 +69,10 @@
       <div class="mx-auto mt-9 max-w-3xl sm:mt-10">
         <form id="prompt-form" class="flex items-end gap-2 rounded-2xl border border-gray-300 p-2">
           <label id="prompt-label" class="sr-only" for="prompt">Tell the studio what to change</label>
+          <div class="relative min-w-0 flex-1">
           <textarea
             id="prompt"
-            class="max-h-60 min-w-0 flex-1 resize-none field-sizing-content rounded-lg bg-transparent px-3 py-2.5 text-lg leading-relaxed outline-offset-0 placeholder:text-gray-500 max-[480px]:pl-2 max-[480px]:text-[17px]"
+            class="block max-h-60 w-full resize-none field-sizing-content rounded-lg bg-transparent px-3 py-2.5 text-lg leading-relaxed outline-offset-0 placeholder:text-gray-500 max-[480px]:pl-2 max-[480px]:text-[17px]"
             name="prompt"
             rows="2"
             placeholder="Tell the studio what to change…"
@@ -80,6 +81,15 @@
             required
             aria-describedby="status"
           >Bring the tempo to 128 bpm, put the kick on steps 1, 5, 9, 13, and set the bass volume to 80.</textarea>
+          <div id="recording-feedback" class="absolute inset-0 flex items-center gap-3 rounded-lg bg-white px-3 max-[480px]:px-2" aria-hidden="true" hidden>
+            <canvas id="recording-signal" class="h-9 min-w-0 flex-1"></canvas>
+            <span id="recording-time" class="shrink-0 text-base text-gray-500 tabular-nums">0:00</span>
+          </div>
+          </div>
+          <button id="microphone" class="group flex size-11 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-black disabled:opacity-40 data-[recording=true]:bg-red-50 data-[recording=true]:text-red-700" type="button" aria-label="Record a command" title="Record a command. First use downloads 17 MB." aria-pressed="false">
+            <svg class="size-5 group-data-[recording=true]:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" /></svg>
+            <svg class="hidden size-5 group-data-[recording=true]:block" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" /></svg>
+          </button>
           <button id="run" class="min-h-11 min-w-19 rounded-lg bg-black px-4.5 py-2.5 text-[17px] text-white hover:bg-neutral-800 disabled:cursor-default disabled:opacity-45 max-[480px]:min-w-16 max-[480px]:px-3" type="submit">Run</button>
         </form>
         <div id="examples" class="mt-4 flex flex-wrap justify-center gap-2"></div>
@@ -98,9 +108,9 @@
       <p>
         <a class="underline underline-offset-4 hover:text-gray-700" href="https://github.com/afshinm/cactus-needle">cactus-needle</a>
         runs the <a class="underline underline-offset-4 hover:text-gray-700" href="https://github.com/cactus-compute/needle">Needle AI model</a>
-        in JavaScript apps. Here, it reads your
-        request and chooses actions to change the beat or control the lights.
-        The model runs in your browser, so your requests stay on your device.
+        in JavaScript apps. Here, it chooses actions to change the beat or control the lights.
+        Type a request or speak it with <a class="underline underline-offset-4 hover:text-gray-700" href="https://www.cactuscompute.com/blog/whistle">Whistle</a>.
+        Both models run in your browser, so your requests and audio stay on your device.
       </p>
     </footer>
     <script type="module" src="/main.ts"></script>

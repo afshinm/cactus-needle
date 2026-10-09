@@ -1,6 +1,13 @@
-import { createNeedle, type Needle, NeedleError } from 'cactus-needle/browser';
+import {
+  createNeedle,
+  createWhistle,
+  type Needle,
+  NeedleError,
+  type Whistle,
+} from 'cactus-needle/browser';
 import { element } from './dom.ts';
 import { createLights } from './lights.ts';
+import { type Recording, startRecording } from './recording.ts';
 import { createStudio } from './studio.ts';
 import './style.css';
 
@@ -9,6 +16,10 @@ let selected: keyof typeof demos = 'studio';
 const form = element<HTMLFormElement>('#prompt-form');
 const prompt = element<HTMLTextAreaElement>('#prompt');
 const run = element<HTMLButtonElement>('#run');
+const microphone = element<HTMLButtonElement>('#microphone');
+const recordingFeedback = element('#recording-feedback');
+const recordingSignal = element<HTMLCanvasElement>('#recording-signal');
+const recordingTime = element('#recording-time');
 const status = element<HTMLParagraphElement>('#status');
 const result = element<HTMLDivElement>('#result');
 const calls = element<HTMLElement>('#calls');
@@ -17,7 +28,57 @@ const viewTools = element<HTMLButtonElement>('#view-tools');
 const examples = element('#examples');
 const tabs = document.querySelectorAll<HTMLButtonElement>('[data-demo]');
 let needle: Needle | undefined;
+let whistle: Whistle | undefined;
+let recording: Recording | undefined;
 let active: AbortController | undefined;
+let stopFeedback: (() => void) | undefined;
+
+function showRecording(capture: Recording): () => void {
+  const context = recordingSignal.getContext('2d');
+  const levels: number[] = [];
+  const interval = matchMedia('(prefers-reduced-motion: reduce)').matches ? 150 : 50;
+  let previous = 0;
+  let frame = 0;
+  recordingFeedback.hidden = false;
+  prompt.style.visibility = 'hidden';
+  const draw = (now: number) => {
+    frame = requestAnimationFrame(draw);
+    if (now - previous < interval) return;
+    previous = now;
+    const seconds = Math.min(30, Math.floor((now - capture.startedAt) / 1000));
+    recordingTime.textContent = `0:${String(seconds).padStart(2, '0')}`;
+    if (!context) return;
+    const width = recordingSignal.clientWidth;
+    const height = recordingSignal.clientHeight;
+    const scale = window.devicePixelRatio || 1;
+    if (
+      recordingSignal.width !== Math.round(width * scale) ||
+      recordingSignal.height !== Math.round(height * scale)
+    ) {
+      recordingSignal.width = Math.round(width * scale);
+      recordingSignal.height = Math.round(height * scale);
+    }
+    context.setTransform(scale, 0, 0, scale, 0, 0);
+    context.clearRect(0, 0, width, height);
+    levels.push(Math.min(1, capture.level() * 6));
+    const count = Math.floor(width / 5);
+    levels.splice(0, Math.max(0, levels.length - count));
+    for (let index = 0; index < count; index++) {
+      const level = levels[index - (count - levels.length)] ?? 0;
+      const bar = Math.max(2, level * (height - 4));
+      context.fillStyle = level > 0.025 ? '#27272a' : '#d1d5db';
+      context.beginPath();
+      context.roundRect(index * 5, (height - bar) / 2, 2, bar, 1);
+      context.fill();
+    }
+  };
+  draw(performance.now());
+  return () => {
+    cancelAnimationFrame(frame);
+    recordingFeedback.hidden = true;
+    prompt.style.visibility = '';
+  };
+}
 
 function message(text: string, error = false): void {
   status.textContent = text;
@@ -25,6 +86,14 @@ function message(text: string, error = false): void {
 }
 
 function errorMessage(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError')
+      return 'Allow microphone access in your browser, then try again.';
+    if (error.name === 'NotFoundError') return 'No microphone found. Connect one and try again.';
+    if (error.name === 'NotReadableError')
+      return 'The microphone is busy. Close other recording apps and try again.';
+    if (error.name === 'EncodingError') return 'Could not read that recording. Try again.';
+  }
   if (error instanceof NeedleError) {
     if (error.code === 'DOWNLOAD_FAILED')
       return 'Could not download the model. Check your connection and try again.';
@@ -68,29 +137,77 @@ function selectDemo(name: keyof typeof demos): void {
   }
 }
 
-async function generate(): Promise<void> {
+async function generate(voice = false): Promise<void> {
   if (active) {
     active.abort();
     return;
   }
-  const input = prompt.value.trim();
-  if (!input) return;
+  let input = prompt.value.trim();
+  if (!input && !voice) return;
   const demo = demos[selected];
   const controller = new AbortController();
   active = controller;
   prompt.readOnly = true;
   run.disabled = false;
   run.textContent = 'Cancel';
+  microphone.disabled = true;
   for (const button of examples.querySelectorAll('button')) button.disabled = true;
   for (const tab of tabs) tab.disabled = true;
   result.hidden = true;
   viewTools.hidden = true;
   viewTools.setAttribute('aria-expanded', 'false');
   form.setAttribute('aria-busy', 'true');
+  let modelInUse: 'needle' | 'whistle' | undefined;
 
   try {
     await demo.prepare?.();
     controller.signal.throwIfAborted();
+    let speechTime = 0;
+    if (voice) {
+      demo.deactivate?.();
+      message('Allow the microphone to record a command.');
+      recording = await startRecording(controller.signal);
+      stopFeedback = showRecording(recording);
+      microphone.disabled = false;
+      microphone.dataset.recording = 'true';
+      microphone.setAttribute('aria-pressed', 'true');
+      microphone.setAttribute('aria-label', 'Stop recording');
+      microphone.title = 'Stop recording';
+      message('Listening… Stops after a pause, or press stop.');
+      const audio = await recording.result;
+      stopFeedback();
+      stopFeedback = undefined;
+      recording = undefined;
+      microphone.disabled = true;
+      microphone.dataset.recording = 'false';
+      microphone.setAttribute('aria-pressed', 'false');
+      controller.signal.throwIfAborted();
+      modelInUse = 'whistle';
+      if (!whistle) {
+        message('Loading speech model…');
+        whistle = await createWhistle({
+          abortSignal: controller.signal,
+          onDownloadProgress: ({ percentage }) =>
+            message(
+              percentage === 100
+                ? 'Starting speech model…'
+                : `Downloading speech model… ${Math.round(percentage ?? 0)}%`,
+            ),
+        });
+      }
+      message('Transcribing…');
+      const start = performance.now();
+      const transcript = await whistle.transcribe(audio, { abortSignal: controller.signal });
+      modelInUse = undefined;
+      speechTime = performance.now() - start;
+      input = transcript.text.trim();
+      if (!input) {
+        message('No speech heard. Try again.');
+        return;
+      }
+      prompt.value = input;
+    }
+    modelInUse = 'needle';
     if (!needle) {
       message('Loading model…');
       needle = await createNeedle({
@@ -113,7 +230,8 @@ async function generate(): Promise<void> {
       abortSignal: controller.signal,
     });
     controller.signal.throwIfAborted();
-    const elapsed = Math.round(performance.now() - start);
+    modelInUse = undefined;
+    const elapsed = Math.round(performance.now() - start + speechTime);
     const { toolCalls, suppressedToolCalls } = response;
     // Suppressed predictions are visible for inspection, but are never executed.
     if (toolCalls.length) demo.apply(toolCalls);
@@ -129,15 +247,32 @@ async function generate(): Promise<void> {
       controller.signal.aborted ||
       (error instanceof NeedleError && ['CLOSED', 'WORKER_ERROR'].includes(error.code))
     ) {
-      await needle?.close();
-      needle = undefined;
+      if (modelInUse === 'needle') {
+        await needle?.close();
+        needle = undefined;
+      }
+      if (modelInUse === 'whistle') {
+        await whistle?.close();
+        whistle = undefined;
+      }
     }
     message(
       controller.signal.aborted ? 'Cancelled.' : errorMessage(error),
       !controller.signal.aborted,
     );
   } finally {
+    stopFeedback?.();
+    stopFeedback = undefined;
+    recording?.stop();
+    recording = undefined;
     active = undefined;
+    microphone.disabled = false;
+    microphone.dataset.recording = 'false';
+    microphone.setAttribute('aria-pressed', 'false');
+    microphone.setAttribute('aria-label', 'Record a command');
+    microphone.title = whistle
+      ? 'Record a command'
+      : 'Record a command. First use downloads 17 MB.';
     prompt.readOnly = false;
     run.textContent = 'Run';
     run.disabled = !prompt.value.trim();
@@ -146,6 +281,13 @@ async function generate(): Promise<void> {
     form.setAttribute('aria-busy', 'false');
   }
 }
+
+microphone.addEventListener('click', () => {
+  if (recording) {
+    recording.stop();
+    microphone.disabled = true;
+  } else if (!active) void generate(true);
+});
 
 viewTools.addEventListener('click', () => {
   result.hidden = !result.hidden;
@@ -175,6 +317,8 @@ for (const tab of tabs) {
 window.addEventListener('pagehide', () => {
   active?.abort();
   void needle?.close();
+  void whistle?.close();
   needle = undefined;
+  whistle = undefined;
 });
 selectDemo(location.hash === '#lights' ? 'lights' : 'studio');

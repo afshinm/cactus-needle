@@ -1,4 +1,4 @@
-cactus-needle (this npm package) is an independent browser and Node.js wrapper for Needle 3.
+cactus-needle (this npm package) is an independent browser and Node.js wrapper for Needle 3 and Whistle.
 It is not an official Cactus Compute package.
 
 The files vendor/needle.cjs and vendor/needle.wasm are from Cactus Compute's
@@ -13,6 +13,7 @@ dist/browser/worker.js bundles the loader for the browser using tsdown's
 CommonJS interop and minification. Node.js branches are removed in that bundle.
 The vendored loader and WASM binary are unchanged.
 
-Model weights are downloaded separately from the same upstream repository
-and are not included in the npm package. Its Apache License 2.0 also applies
+Model weights are downloaded separately from Cactus-Compute/needle3 and
+Cactus-Compute/whistle on Hugging Face and are not included in the npm package.
+Their Apache License 2.0 also applies
 when redistributing those weights.

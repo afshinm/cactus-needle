@@ -19,6 +19,13 @@
       "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     }
   },
+  "speechModel": {
+    "repository": "Cactus-Compute/whistle",
+    "revision": "b358ddadd89b7a713b5aa131f23032d3cca1b251",
+    "path": "whistle.cact",
+    "size": 16919407,
+    "sha256": "b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb"
+  },
   "model": {
     "path": "needle3.cact",
     "size": 35335380,

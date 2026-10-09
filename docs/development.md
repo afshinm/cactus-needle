@@ -32,6 +32,13 @@ Patterns remain editable by hand. The Lights tab keeps the smaller device-contro
 example. Results show timing and call count, with the actual tool calls behind
 “View tools”.
 
+The microphone records a spoken command, transcribes it locally with Whistle,
+and passes the transcript to Needle. The input shows the measured microphone
+level and elapsed time. Recording stops after 1.6 seconds of quiet following
+detected speech, on manual stop, or at 30 seconds. Each model loads once and is
+reused. Speech detection uses the browser's audio signal; it does not call a
+hosted recognition service.
+
 Needle works best with concrete requests. Vague requests such as “make it more
 fun” do not reliably produce a musical plan. The studio uses Needle's `triggers`
 routing hints; matching hints can bypass the upstream confidence floor. No
@@ -74,7 +81,7 @@ with its recommended rules:
 ## Tests
 
 All tests use Node's built-in test runner. For real inference tests, download the
-pinned model into the ignored `.cache` directory and install Chromium:
+pinned Needle and Whistle models into the ignored `.cache` directory and install Chromium:
 
 ```sh
 pnpm model:download
@@ -86,8 +93,11 @@ node examples/tool-calling.mjs
 ```
 
 Set `NEEDLE_MODEL_PATH` to use an existing copy of the pinned base model for
-integration, browser, and package tests. `NEEDLE_BROWSER_EXECUTABLE` selects
-an existing Chromium binary.
+integration, browser, and package tests. `WHISTLE_MODEL_PATH` selects existing
+Whistle weights for speech integration tests. `NEEDLE_BROWSER_EXECUTABLE` selects
+an existing Chromium binary. Speech unit tests cover WAV formats, resampling,
+the native interface, stream cleanup, and AI SDK 6/7 conversion. Speech integration
+tests run the real model on silence, covering files, PCM, streaming, and embeddings.
 
 Browser tests run WASM tool calling and embeddings. They check responsiveness,
 session isolation, cancellation, cache reuse, corruption handling, and inference
@@ -130,10 +140,10 @@ when the matrix changes.
 | `src/runtime/` | Shared WASM engine, session RPC, configuration, and artifact metadata |
 | `src/node/` | Filesystem provisioning, worker threads, and Node options |
 | `src/browser/` | Browser workers, asset caching, and browser options |
-| `src/ai-sdk/` | Provider wiring, language and embedding models, request preparation, and session cleanup |
+| `src/ai-sdk/` | Provider wiring, language/embedding/transcription models, request preparation, and session cleanup |
 
-Root source modules define shared public types, schemas, the tool helper, and
-errors. Entry points explicitly list public exports. Internal modules import
+Root source modules own the reusable clients, tool loop, shared helpers, public
+types, schemas, and errors. Entry points explicitly list public exports. Internal modules import
 implementations directly. Artifact metadata comes from `vendor/manifest.json`;
 the build does not generate source files.
 
@@ -179,6 +189,7 @@ Upstream references:
 
 - [Needle source and Python SDK](https://github.com/cactus-compute/needle)
 - [Published weights and runtime](https://huggingface.co/Cactus-Compute/needle3)
+- [Whistle speech model](https://huggingface.co/Cactus-Compute/whistle)
 - [Platform and C interface documentation](https://cactuscompute.com/blog/needle-supported-devices)
 
 Keep the upstream Apache-2.0 license and required notices when redistributing
