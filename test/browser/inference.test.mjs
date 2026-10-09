@@ -334,7 +334,7 @@ test('denied CacheStorage does not prevent inference with custom asset URLs', {
     const needle = await sdk.createNeedle({
       ...options,
       workerUrl: '/storage-blocked-worker.js',
-      wasmUrl: '/dist/browser/needle.wasm',
+      wasmUrl: '/vendor/needle.wasm',
     });
     try {
       return await needle.generate({ prompt: 'Turn on the kitchen lights' });

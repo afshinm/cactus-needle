@@ -20,9 +20,9 @@ Build before running checks or tests: they exercise the compiled package.
 ## Build and lint
 
 [tsdown](https://tsdown.dev/) compiles the library and declarations, cleans
-`dist`, bundles the browser worker, copies WASM, and validates package exports
+`dist`, bundles the browser worker, and validates package exports
 with [publint](https://publint.dev/). Library modules retain their directory
-structure so worker and WASM URLs resolve beside the code that loads them.
+structure so relative worker and WASM URLs stay valid.
 Configuration lives in `tsdown.config.ts`.
 
 [Biome](https://biomejs.dev/) handles linting, formatting, and import organization
@@ -122,11 +122,23 @@ and `--frozen-lockfile` make development installations reproducible.
 
 ## Vendored assets
 
-Every build verifies the original assets against `vendor/manifest.json`.
-`pnpm vendor:download` restores those exact upstream files. The tsdown plugin
-in `build/needle-runtime.ts` also adapts the pinned JavaScript loader to ESM
-and removes Node branches. The original vendored files and WASM binary are
-unchanged. Model weights are downloaded separately and are not in the tarball.
+Only four files are kept in `vendor/`:
+
+| File | Purpose |
+| --- | --- |
+| `needle.cjs` | Upstream JavaScript loader, renamed from `needle.js` without changing its contents |
+| `needle.wasm` | One engine binary shared by Node and the browser |
+| `manifest.json` | Upstream revision, download paths, sizes, and SHA-256 checksums |
+| `LICENSE` | Upstream Apache-2.0 license |
+
+The browser build uses tsdown's CommonJS support and minification to remove Node
+branches. It does not patch the upstream source. `build/verify-runtime.ts`
+verifies the pinned files and checks that the browser worker has no Node imports.
+
+Two small setup scripts remain: `pnpm vendor:download` restores the pinned runtime
+files, and `pnpm model:download` uses the public download API to populate the local
+test cache. Neither runs during package installation. Model weights are downloaded
+separately and are not in the tarball.
 
 Upstream references:
 

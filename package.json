@@ -31,7 +31,7 @@
       "default": "./dist/ai-sdk/browser.js"
     },
     "./browser/worker.js": "./dist/browser/worker.js",
-    "./browser/needle.wasm": "./dist/browser/needle.wasm",
+    "./browser/needle.wasm": "./vendor/needle.wasm",
     "./package.json": "./package.json"
   },
   "files": [

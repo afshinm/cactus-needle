@@ -1,5 +1,6 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type UserConfig } from 'tsdown';
-import { needleRuntime } from './build/needle-runtime.ts';
+import { verifyRuntime } from './build/verify-runtime.ts';
 
 const output = {
   format: 'esm',
@@ -21,7 +22,7 @@ export default defineConfig((options) => [
       'src/node/worker.ts',
     ],
     root: 'src',
-    // Keep import.meta.url next to each platform's worker and WASM assets.
+    // Preserve relative URLs for each platform's worker and WASM assets.
     unbundle: true,
     platform: 'neutral',
     deps: { neverBundle: [/^node:/] },
@@ -37,10 +38,15 @@ export default defineConfig((options) => [
     entry: { 'browser/worker': 'src/browser/worker.ts' },
     platform: 'browser',
     dts: false,
-    define: { ENVIRONMENT_IS_NODE: 'false' },
-    copy: [{ from: 'vendor/needle.wasm', to: 'dist/browser' }],
-    plugins: [needleRuntime()],
+    alias: {
+      'needle-runtime': fileURLToPath(new URL('./vendor/needle.cjs', import.meta.url)),
+    },
+    // Use CommonJS interop and dead-code elimination to remove the loader's Node branches.
+    define: { 'globalThis.process': 'undefined', __filename: 'undefined' },
+    minify: true,
+    deps: { neverBundle: [/^node:/] },
+    plugins: [verifyRuntime()],
     banner:
-      '// Includes Cactus Compute Needle 3 loader, adapted to browser ESM. Apache-2.0; see NOTICE and vendor/LICENSE.',
+      '// Includes Cactus Compute Needle 3 loader, bundled for the browser. Apache-2.0; see NOTICE and vendor/LICENSE.',
   },
 ]);

@@ -67,7 +67,7 @@ export async function createNeedle<const Tools extends ToolCollection = ToolColl
     model,
     wasmUrl:
       options.wasmUrl === undefined
-        ? new URL('./needle.wasm', import.meta.url).href
+        ? new URL('../../vendor/needle.wasm', import.meta.url).href
         : resolveUrl(options.wasmUrl, 'wasmUrl'),
     cache: options.cache ?? true,
     offline: options.offline ?? false,

@@ -29,7 +29,7 @@ export async function loadNodeEngine(config: WorkerConfig): Promise<Engine> {
     );
   }
   inspectModel(data);
-  const factory = createRequire(import.meta.url)('../../vendor/needle.js') as Factory;
+  const factory = createRequire(import.meta.url)('../../vendor/needle.cjs') as Factory;
   const wasmBinary = await readFile(new URL('../../vendor/needle.wasm', import.meta.url));
   return Engine.create(await factory({ wasmBinary }), config, data);
 }
