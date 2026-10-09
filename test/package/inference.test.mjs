@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -48,12 +48,15 @@ test('packed package supports offline Node, Vite, and AI SDK 6 and 7', async () 
       seen.add(key);
       for (const dependency of Object.keys(pkg.dependencies ?? {}))
         await visit(dependency, dirname(path));
+      // npm 11 cannot reliably pack a directory inside pnpm's node_modules tree.
+      const source = join(consumer, 'dependency-sources', key);
+      await cp(dirname(path), source, { recursive: true });
       const { stdout } = await exec(
         process.execPath,
         [
           npmCli,
           'pack',
-          dirname(path),
+          source,
           '--ignore-scripts',
           '--json',
           '--pack-destination',
