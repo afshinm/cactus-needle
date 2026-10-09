@@ -1,0 +1,101 @@
+{
+  "name": "cactus-needle",
+  "version": "0.3.0",
+  "description": "Local Needle 3 inference for browsers and Node.js, standalone or as a Vercel AI SDK provider.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "browser": {
+        "types": "./dist/browser/index.d.ts",
+        "default": "./dist/browser/index.js"
+      },
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "default": "./dist/browser/index.js"
+    },
+    "./ai-sdk": {
+      "browser": {
+        "types": "./dist/ai-sdk/browser.d.ts",
+        "default": "./dist/ai-sdk/browser.js"
+      },
+      "types": "./dist/ai-sdk/index.d.ts",
+      "default": "./dist/ai-sdk/index.js"
+    },
+    "./ai-sdk/browser": {
+      "types": "./dist/ai-sdk/browser.d.ts",
+      "default": "./dist/ai-sdk/browser.js"
+    },
+    "./browser/worker.js": "./dist/browser/worker.js",
+    "./browser/needle.wasm": "./dist/browser/needle.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "vendor",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json && tsc -p test/browser/tsconfig.json",
+    "check": "pnpm lint && pnpm typecheck",
+    "test": "node --test test/*.test.mjs",
+    "test:integration": "node --test test/integration/*.test.mjs",
+    "test:browser": "node --test test/browser/*.test.mjs",
+    "test:pack": "node --test test/package/*.test.mjs",
+    "model:download": "node scripts/download-model.mjs",
+    "vendor:download": "node scripts/download-vendor.mjs",
+    "prepack": "pnpm build"
+  },
+  "keywords": [
+    "needle",
+    "local-ai",
+    "wasm",
+    "tool-calling",
+    "embeddings",
+    "offline",
+    "ai-sdk",
+    "vercel"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ai-sdk/provider": "^3.0.18",
+    "@types/json-schema": "^7.0.15"
+  },
+  "peerDependencies": {
+    "ai": "^6.0.0 || ^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "^22.18.0",
+    "ai": "7.0.136",
+    "ai-v6": "npm:ai@6.0.302",
+    "playwright": "1.64.0",
+    "publint": "0.3.25",
+    "tsdown": "0.23.0",
+    "typescript": "~5.9.3",
+    "vite": "8.3.4",
+    "zod": "4.6.5"
+  },
+  "packageManager": "pnpm@10.27.0"
+}
