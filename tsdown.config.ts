@@ -9,7 +9,7 @@ const output = {
   report: false,
 } satisfies UserConfig;
 
-export default defineConfig([
+export default defineConfig((options) => [
   {
     ...output,
     name: 'library',
@@ -28,7 +28,8 @@ export default defineConfig([
     dts: true,
     // Consumers need async disposal types even without Node's ambient libraries.
     banner: { dts: '/// <reference lib="esnext.disposable" />' },
-    publint: true,
+    // Validate completed package builds; watch mode starts before all files exist.
+    publint: !options.watch,
   },
   {
     ...output,
